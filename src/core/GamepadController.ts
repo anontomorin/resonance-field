@@ -42,13 +42,65 @@ const BUTTON = {
   DPAD_RIGHT: 15
 } as const;
 
-/** 直接对应动作的按键 */
+/**
+ * 非标准映射（`mapping !== 'standard'`）下的**兜底猜测**索引。
+ *
+ * 为什么需要这个：蓝牙连接的国产手柄在 Chrome 里经常拿不到 `mapping: 'standard'`
+ * （拿到的常常是空串），此时 W3C 规定的索引表**完全不适用** ——
+ * 十字键可能根本不是 12~15，A 键也可能不在 0。
+ * 而游戏此前只认标准表，于是表现成"手柄连上了、进游戏却怎么按都没反应"。
+ *
+ * 兜底策略：非标准映射时改用"最常见的一批布局"来做猜测，
+ * 并且**放宽方向判定**（见 readDirection 的 axes 兜底扫描），
+ * 宁可偶尔误判，也不能让玩家完全动不了。
+ *
+ * 这些数字不是规范，是经验值。猜错的代价是"某个键没响应"，
+ * 比"整个手柄失效"小得多，所以对未知手柄一律采用。
+ */
+const FALLBACK_BUTTON = {
+  /** 很多 DInput 手柄把 A 放在 1 或 2；这里取 0 之外的常见位 */
+  A: [0, 1, 2],
+  /** 重开：找不准则交给键盘，不放宽以免误触发（重开不可逆） */
+  Y: [3, 2],
+  /** 扳机位置差异极大，非标准映射下不猜 */
+  RT: [],
+  /** Start / Options 常见于 8 / 9 / 10 */
+  MENU: [9, 8, 10],
+  DPAD_UP: [12, 4],
+  DPAD_DOWN: [13, 5],
+  DPAD_LEFT: [14, 6],
+  DPAD_RIGHT: [15, 7]
+} as const;
+
+/** 直接对应动作的按键（标准映射索引） */
 const BUTTON_ACTIONS: Array<[number, GameAction]> = [
   [BUTTON.A, 'pulse'],
   [BUTTON.RT, 'pulse'],
   [BUTTON.Y, 'restart'],
   [BUTTON.MENU, 'pause']
 ];
+
+/**
+ * 标准索引 -> 非标准映射下的候选索引表。
+ * 不在表里的键（例如 RT）在非标准映射下就**不猜** ——
+ * 见 FALLBACK_BUTTON 的说明。
+ */
+const FALLBACK_FOR: Record<number, readonly number[]> = {
+  [BUTTON.A]: FALLBACK_BUTTON.A,
+  [BUTTON.Y]: FALLBACK_BUTTON.Y,
+  [BUTTON.RT]: FALLBACK_BUTTON.RT,
+  [BUTTON.MENU]: FALLBACK_BUTTON.MENU,
+  [BUTTON.DPAD_UP]: FALLBACK_BUTTON.DPAD_UP,
+  [BUTTON.DPAD_DOWN]: FALLBACK_BUTTON.DPAD_DOWN,
+  [BUTTON.DPAD_LEFT]: FALLBACK_BUTTON.DPAD_LEFT,
+  [BUTTON.DPAD_RIGHT]: FALLBACK_BUTTON.DPAD_RIGHT
+};
+
+/** 某个标准索引在当前手柄上"算不算按下"（按映射模式分派标准表 / 兜底表） */
+function candidatesFor(pad: Gamepad, index: number): readonly number[] {
+  if (pad.mapping === 'standard') return [index];
+  return FALLBACK_FOR[index] ?? [index];
+}
 
 export interface PadDirection {
   dx: number;
@@ -175,6 +227,27 @@ export class GamepadController {
   }
 
   /**
+   * 手柄是否使用标准布局。
+   * `mapping === 'standard'` 是 W3C 的承诺：索引表一定符合规范。
+   * 拿不到这个值的（蓝牙国产手柄常见）只能走兜底猜测。
+   */
+  private isStandard(pad: Gamepad): boolean {
+    return pad.mapping === 'standard';
+  }
+
+  /**
+   * 在候选索引里"任一按下即算按下"。
+   * 标准映射传单元素数组，非标准映射传兜底候选表 ——
+   * 调用方不必关心自己处在哪条路径上。
+   */
+  private anyDown(pad: Gamepad, indices: readonly number[]): boolean {
+    for (const index of indices) {
+      if (this.isDown(pad, index)) return true;
+    }
+    return false;
+  }
+
+  /**
    * 本帧所有"方向 / 动作"的按住集合。
    * 方向也放进来，是因为菜单导航需要"推一下走一格"的边沿语义，
    * 而游玩状态只读 direction，两边共用同一份按下状态。
@@ -182,12 +255,12 @@ export class GamepadController {
   private readDown(pad: Gamepad): Set<GameAction> {
     const down = new Set<GameAction>();
     for (const [index, action] of BUTTON_ACTIONS) {
-      if (this.isDown(pad, index)) down.add(action);
+      if (this.anyDown(pad, candidatesFor(pad, index))) down.add(action);
     }
-    if (this.isDown(pad, BUTTON.DPAD_UP)) down.add('up');
-    if (this.isDown(pad, BUTTON.DPAD_DOWN)) down.add('down');
-    if (this.isDown(pad, BUTTON.DPAD_LEFT)) down.add('left');
-    if (this.isDown(pad, BUTTON.DPAD_RIGHT)) down.add('right');
+    if (this.anyDown(pad, candidatesFor(pad, BUTTON.DPAD_UP))) down.add('up');
+    if (this.anyDown(pad, candidatesFor(pad, BUTTON.DPAD_DOWN))) down.add('down');
+    if (this.anyDown(pad, candidatesFor(pad, BUTTON.DPAD_LEFT))) down.add('left');
+    if (this.anyDown(pad, candidatesFor(pad, BUTTON.DPAD_RIGHT))) down.add('right');
 
     const dir = this.readDirection(pad);
     if (dir) {
@@ -202,20 +275,87 @@ export class GamepadController {
   }
 
   private readDpad(pad: Gamepad): PadDirection | null {
-    if (this.isDown(pad, BUTTON.DPAD_UP)) return { dx: 0, dy: -1 };
-    if (this.isDown(pad, BUTTON.DPAD_DOWN)) return { dx: 0, dy: 1 };
-    if (this.isDown(pad, BUTTON.DPAD_LEFT)) return { dx: -1, dy: 0 };
-    if (this.isDown(pad, BUTTON.DPAD_RIGHT)) return { dx: 1, dy: 0 };
+    if (this.anyDown(pad, candidatesFor(pad, BUTTON.DPAD_UP))) return { dx: 0, dy: -1 };
+    if (this.anyDown(pad, candidatesFor(pad, BUTTON.DPAD_DOWN))) return { dx: 0, dy: 1 };
+    if (this.anyDown(pad, candidatesFor(pad, BUTTON.DPAD_LEFT))) return { dx: -1, dy: 0 };
+    if (this.anyDown(pad, candidatesFor(pad, BUTTON.DPAD_RIGHT))) return { dx: 1, dy: 0 };
     return null;
   }
 
+  /**
+   * 读摇杆方向。
+   *
+   * 标准映射直接取 `axes[0]` / `axes[1]`（左摇杆的规范位置）。
+   * 非标准映射下**不能假定左摇杆就在前两个位置** ——
+   * 所以额外扫一遍所有成对的轴，取"偏移最大的那一对"，作为兜底。
+   *
+   * 这是"宁可误判也不能完全动不了"的取舍：只有在该手柄确实有某个轴
+   * 被推到死区之外时才生效，回中状态下不会误触发。
+   */
   private readStick(pad: Gamepad): PadDirection | null {
-    const x = pad.axes[0] ?? 0;
-    const y = pad.axes[1] ?? 0;
+    const standard = this.isStandard(pad);
+    const primary = this.pickAxis(pad.axes[0], pad.axes[1]);
+    if (primary) return primary;
+    if (standard) return null;
+
+    // 非标准：在所有相邻轴对里找偏移最大的一对
+    let best: PadDirection | null = null;
+    let bestMag = STICK_DEAD_ZONE;
+    for (let i = 0; i + 1 < pad.axes.length; i += 2) {
+      const x = pad.axes[i] ?? 0;
+      const y = pad.axes[i + 1] ?? 0;
+      const mag = Math.max(Math.abs(x), Math.abs(y));
+      if (mag > bestMag) {
+        bestMag = mag;
+        best = this.pickAxis(x, y);
+      }
+    }
+    return best;
+  }
+
+  /** 把一对轴值判成四向方向；两个轴都在死区内返回 null */
+  private pickAxis(x: number, y: number): PadDirection | null {
     if (Math.abs(x) < STICK_DEAD_ZONE && Math.abs(y) < STICK_DEAD_ZONE) return null;
     // 四向网格移动：只取位移较大的那个轴，斜推不会变成"斜着走"
     if (Math.abs(x) >= Math.abs(y)) return { dx: x > 0 ? 1 : -1, dy: 0 };
     return { dx: 0, dy: y > 0 ? 1 : -1 };
+  }
+
+  /**
+   * 只读诊断快照：把"浏览器到底报了什么"原样暴露出来。
+   *
+   * 存在的理由：手柄出问题时，玩家能提供的信息只有"按了没反应"，
+   * 而这可能来自 mapping 非标准 / axes 顺序不同 / pressed 恒 false 三种原因，
+   * 猜不出来。把这些原始值显示出来，一次就能定位。
+   */
+  diagnostics(): {
+    connected: boolean;
+    id: string;
+    mapping: string;
+    standard: boolean;
+    buttonCount: number;
+    axisCount: number;
+    pressedIndices: number[];
+    axes: number[];
+    activeDirection: PadDirection | null;
+  } | null {
+    const pad = this.pick();
+    if (!pad) return null;
+    const pressedIndices: number[] = [];
+    for (let i = 0; i < pad.buttons.length; i += 1) {
+      if (this.isDown(pad, i)) pressedIndices.push(i);
+    }
+    return {
+      connected: true,
+      id: pad.id,
+      mapping: pad.mapping,
+      standard: this.isStandard(pad),
+      buttonCount: pad.buttons.length,
+      axisCount: pad.axes.length,
+      pressedIndices,
+      axes: Array.from(pad.axes).map((v) => Number(v.toFixed(3))),
+      activeDirection: this.readDirection(pad)
+    };
   }
 }
 

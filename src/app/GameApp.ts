@@ -72,6 +72,12 @@ export class GameApp {
   private tutorial: TutorialGuide | null = null;
   private external: ExternalRun | null = null;
   private stats = new Map<number, LevelStat>();
+  /**
+   * 挂起的"手柄已连接"提示。
+   * 在标题页插手柄时 HUD 不可见，直接弹 toast 玩家看不到，
+   * 所以先存下来，等进入游玩（setState('playing')）再补发。
+   */
+  private pendingPadToast: string | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.storage = new ProgressStorage();
@@ -190,6 +196,8 @@ export class GameApp {
     this.state = state;
     // 每次切换界面都丢弃手柄焦点：旧界面的索引套到新界面上会指向随机按钮
     this.menus.reset();
+    // 进入游玩时把"插上手柄却没来得及提示"的那条补发出去
+    if (state === 'playing') this.flushPadToast();
   }
 
   private gotoHome(): void {
@@ -820,11 +828,24 @@ export class GameApp {
    */
   private handleGamepadChange(name: string | null): void {
     document.body.classList.toggle('pad-connected', name !== null);
-    if (name !== null && this.state === 'playing') {
-      // 只在游玩中提示：标题页的 HUD 是隐藏的，弹 toast 玩家根本看不到
-      this.hud.showToast(`手柄已连接：${shortPadName(name)}`);
+    if (name !== null) {
+      // 标题页的 HUD 是隐藏的，此刻弹 toast 玩家根本看不到。
+      // 于是挂一个"待提示"标记，等真正进入游玩再补发 ——
+      // 否则玩家在标题页插上手柄时**得不到任何反馈**，
+      // 会误判成"手柄根本没被认到"（这正是曾经报上来的症状之一）。
+      this.pendingPadToast = `手柄已连接：${shortPadName(name)}`;
+      if (this.state === 'playing') this.flushPadToast();
+    } else {
+      this.pendingPadToast = null;
     }
     this.menus.reset();
+  }
+
+  /** 把挂起的连接提示发出去（只在 HUD 可见时有效） */
+  private flushPadToast(): void {
+    if (!this.pendingPadToast) return;
+    this.hud.showToast(this.pendingPadToast);
+    this.pendingPadToast = null;
   }
 
   // ==================== 每帧更新 ====================
@@ -948,6 +969,9 @@ export class GameApp {
       // 手柄：验收脚本要确认"连接后提示条换成手柄键位"以及菜单焦点落在谁身上
       gamepadConnected: this.gamepad.isConnected,
       gamepadName: this.gamepad.isConnected ? shortPadName(this.gamepad.name) : null,
+      // 原始诊断：手柄"连上了却按不动"时，靠它区分是 mapping 非标准、
+      // axes 顺序不同还是 pressed 恒 false —— 只看"有没有连接"是查不出来的
+      gamepadDiag: this.gamepad.diagnostics(),
       menuFocus: this.menus.focused?.textContent ?? null
     };
   }

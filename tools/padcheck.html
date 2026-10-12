@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>手柄自检 · 共振场</title>
+<style>
+  :root {
+    --ink: #0b0c0e;
+    --surface: #14161a;
+    --line: #2a2f36;
+    --text: #e8ecf0;
+    --dim: #7e8792;
+    --amber: #d9a441;
+    --red: #d9587a;
+    --mint: #5fd0a8;
+    --mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px 20px 60px;
+    background: var(--ink); color: var(--text);
+    font: 14px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 0 0 4px; font-weight: 600; }
+  .sub { color: var(--dim); font-size: 12px; margin-bottom: 22px; }
+  h2 {
+    font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--dim); margin: 26px 0 10px; font-weight: 600;
+    border-bottom: 1px solid var(--line); padding-bottom: 6px;
+  }
+  .row {
+    display: grid; grid-template-columns: 160px 1fr; gap: 10px;
+    padding: 9px 0; border-bottom: 1px solid #1b1f24; align-items: baseline;
+  }
+  .k { color: var(--dim); font-size: 12px; }
+  .v { font-family: var(--mono); font-size: 13px; word-break: break-all; }
+  .ok { color: var(--mint); }
+  .bad { color: var(--red); }
+  .warn { color: var(--amber); }
+  .verdict {
+    padding: 14px 16px; border: 1px solid var(--line); border-radius: 3px;
+    background: var(--surface); margin-bottom: 8px;
+  }
+  .verdict strong { font-size: 15px; }
+  .verdict p { margin: 6px 0 0; color: var(--dim); font-size: 13px; }
+  button {
+    font: inherit; padding: 7px 14px; border-radius: 2px; cursor: pointer;
+    background: var(--text); color: var(--ink); border: none; font-weight: 600;
+  }
+  .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .btn-chip {
+    font-family: var(--mono); font-size: 12px; padding: 6px 10px;
+    border: 1px solid var(--line); border-radius: 2px; background: #111317;
+    color: var(--dim); min-width: 64px; text-align: center;
+  }
+  .btn-chip.on { background: var(--amber); color: var(--ink); border-color: var(--amber); font-weight: 700; }
+  .axes { font-family: var(--mono); font-size: 12px; }
+  .bar {
+    display: inline-block; height: 8px; background: #1b1f24; width: 180px;
+    position: relative; vertical-align: middle; border-radius: 2px; margin: 0 8px;
+  }
+  .bar span { position: absolute; top: 0; height: 100%; border-radius: 2px; }
+  code { font-family: var(--mono); background: #1b1f24; padding: 1px 5px; border-radius: 2px; font-size: 12px; }
+  .hint { color: var(--dim); font-size: 12px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>手柄自检</h1>
+  <div class="sub">插上手柄，随便按几个键 / 推一下摇杆。下面的数值应实时变化。</div>
+
+  <div id="verdict" class="verdict">
+    <strong class="warn">正在检测…</strong>
+    <p>如果长时间没有变化，请先按下手柄上的任意按键。</p>
+  </div>
+
+  <h2>浏览器侧</h2>
+  <div class="row"><span class="k">Gamepad API</span><span class="v" id="api">—</span></div>
+  <div class="row"><span class="k">识别到的手柄数</span><span class="v" id="count">—</span></div>
+
+  <h2>手柄信息</h2>
+  <div class="row"><span class="k">设备名</span><span class="v" id="id">—</span></div>
+  <div class="row"><span class="k">connected</span><span class="v" id="connected">—</span></div>
+  <div class="row"><span class="k">mapping</span><span class="v" id="mapping">—</span></div>
+  <div class="row"><span class="k">按钮数量</span><span class="v" id="btnlen">—</span></div>
+  <div class="row"><span class="k">摇杆轴数量</span><span class="v" id="axlen">—</span></div>
+
+  <h2>摇杆原始值（死区 0.42）</h2>
+  <div class="row"><span class="k">axes[0] 水平</span><span class="v" id="ax0">—</span></div>
+  <div class="row"><span class="k">axes[1] 垂直</span><span class="v" id="ax1">—</span></div>
+  <div class="row"><span class="k">当前判定的方向</span><span class="v" id="dirout">—</span></div>
+
+  <h2>按钮原始值（游戏用到的）</h2>
+  <div class="buttons" id="btnchips"></div>
+  <div class="hint">
+    游戏按键映射：<code>A(0)</code> 发波 · <code>Y(3)</code> 重开 ·
+    <code>RT(7)</code> 发波 · <code>Start(9)</code> 暂停 ·
+    十字键 <code>12~15</code> 移动
+  </div>
+
+  <h2>判定</h2>
+  <div class="row"><span class="k">pressed 字段是否在动</span><span class="v" id="pressedSeen">—</span></div>
+  <div class="row"><span class="k">是否只有 value 在动</span><span class="v" id="valueOnly">—</span></div>
+
+  <div style="margin-top:24px"><button onclick="location.reload()">重新检测</button></div>
+</div>
+
+<script>
+const BTN = { A: 0, Y: 3, RT: 7, START: 9, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
+const LABELS = {
+  0: 'A', 1: 'B', 2: 'X', 3: 'Y', 4: 'LB', 5: 'RB', 6: 'LT', 7: 'RT',
+  8: 'Back', 9: 'Start', 10: 'LS', 11: 'RS', 12: '↑', 13: '↓', 14: '←', 15: '→', 16: 'Guide'
+};
+
+const $ = (id) => document.getElementById(id);
+const set = (id, text, cls) => {
+  const el = $(id);
+  el.textContent = text;
+  el.className = 'v' + (cls ? ' ' + cls : '');
+};
+
+let sawPressedTrue = false;
+let sawValueWhileNotPressed = false;
+let everSawPad = false;
+let firstPadId = null;
+
+const chips = $('btnchips');
+const chipEls = {};
+for (const [idx, label] of Object.entries(LABELS)) {
+  const d = document.createElement('div');
+  d.className = 'btn-chip';
+  d.dataset.index = idx;
+  d.textContent = label;
+  chips.appendChild(d);
+  chipEls[idx] = d;
+}
+
+function tick() {
+  const apiOk = typeof navigator.getGamepads === 'function';
+  set('api', apiOk ? '可用' : '不可用', apiOk ? 'ok' : 'bad');
+  if (!apiOk) { $('verdict').innerHTML = '<strong class="bad">这台浏览器不支持 Gamepad API</strong>'; requestAnimationFrame(tick); return; }
+
+  const list = Array.from(navigator.getGamepads()).filter(Boolean);
+  set('count', String(list.length), list.length > 0 ? 'ok' : 'warn');
+
+  if (list.length === 0) {
+    $('verdict').innerHTML = '<strong class="warn">没有检测到手柄</strong>' +
+      '<p>请插好手柄，然后<strong>按下任意按键</strong>——Chrome 必须先收到一次输入才会把手柄暴露给网页。</p>';
+    requestAnimationFrame(tick);
+    return;
+  }
+
+  const pad = list[0];
+  everSawPad = true;
+  if (!firstPadId) firstPadId = pad.id;
+
+  set('id', pad.id);
+  set('connected', String(pad.connected), pad.connected ? 'ok' : 'bad');
+  set('mapping', pad.mapping || '（空）', pad.mapping === 'standard' ? 'ok' : 'warn');
+  set('btnlen', String(pad.buttons.length), pad.buttons.length >= 16 ? 'ok' : 'warn');
+  set('axlen', String(pad.axes.length), pad.axes.length >= 2 ? 'ok' : 'bad');
+
+  const ax0 = pad.axes[0] ?? 0;
+  const ax1 = pad.axes[1] ?? 0;
+  const bar = (v) => {
+    const pct = Math.min(100, Math.abs(v) * 100);
+    const color = Math.abs(v) >= 0.42 ? 'var(--amber)' : 'var(--dim)';
+    const left = v < 0 ? (50 - pct / 2) : 50;
+    return '<span style="left:' + left + '%;width:' + (pct / 2) + '%;background:' + color + '"></span>';
+  };
+  $('ax0').innerHTML = ax0.toFixed(3) + '<span class="bar">' + bar(ax0) + '</span>';
+  $('ax1').innerHTML = ax1.toFixed(3) + '<span class="bar">' + bar(ax1) + '</span>';
+
+  const DZ = 0.42;
+  let dirText = '无（回中）';
+  if (Math.abs(ax0) >= DZ || Math.abs(ax1) >= DZ) {
+    if (Math.abs(ax0) >= Math.abs(ax1)) dirText = ax0 > 0 ? '右' : '左';
+    else dirText = ax1 > 0 ? '下' : '上';
+  }
+  set('dirout', dirText, dirText === '无（回中）' ? 'warn' : 'ok');
+
+  for (const idx of Object.keys(LABELS)) {
+    const b = pad.buttons[idx];
+    const el = chipEls[idx];
+    if (!el) continue;
+    const pressed = b ? b.pressed : false;
+    const value = b ? b.value : 0;
+    const on = pressed || value > 0.5;
+    el.className = 'btn-chip' + (on ? ' on' : '');
+    if (on) {
+      el.textContent = LABELS[idx] + ' ' + Number(value).toFixed(2);
+      if (pressed) sawPressedTrue = true;
+      else if (value > 0.5) sawValueWhileNotPressed = true;
+    } else {
+      el.textContent = LABELS[idx];
+    }
+  }
+
+  set('pressedSeen', sawPressedTrue ? '是（标准行为）' : '否', sawPressedTrue ? 'ok' : 'warn');
+  set('valueOnly', sawValueWhileNotPressed
+    ? '是 —— 只有 value 在动，pressed 恒为 false'
+    : '否',
+    sawValueWhileNotPressed ? 'warn' : 'ok');
+
+  let verdict;
+  if (sawPressedTrue) {
+    verdict = '<strong class="ok">手柄工作正常</strong><p>浏览器能正确读到按键的 pressed 状态。' +
+      '如果游戏里仍无反应，请把这张截图与下面的信息一起反馈。</p>';
+  } else if (sawValueWhileNotPressed) {
+    verdict = '<strong class="warn">手柄只更新 value、不更新 pressed</strong>' +
+      '<p>部分手柄在 Chrome 里会出现这种情况。本游戏已按 ' +
+      '<code>pressed || value &gt; 0.5</code> 判定，理论上仍可用；' +
+      '若游戏内无反应，请反馈此截图。</p>';
+  } else {
+    verdict = '<strong class="warn">手柄已识别，但还没检测到任何按键</strong>' +
+      '<p>请在屏幕上保持按住手柄的 A 键或推住摇杆，观察上面的数值是否变化。</p>';
+  }
+  $('verdict').innerHTML = verdict;
+
+  requestAnimationFrame(tick);
+}
+
+requestAnimationFrame(tick);
+
+// 页面下方收集一份可复制的诊断文本
+window.__padReport = () => JSON.stringify({
+  everSawPad,
+  firstPadId,
+  sawPressedTrue,
+  sawValueWhileNotPressed,
+  userAgent: navigator.userAgent
+}, null, 2);
+</script>
+</body>
+</html>
