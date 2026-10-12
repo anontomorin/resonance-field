@@ -1,0 +1,13 @@
+node_modules/
+.tmp/
+*.local
+.DS_Store
+
+# 构建产物：由 GitHub Actions 在 CI 里重新构建，不入库
+dist/
+
+# Vite 的临时时间戳配置
+vite.config.ts.timestamp-*.mjs
+
+# AI 助手的工作笔记（保留在本地，不随仓库分发）
+.workbuddy/
