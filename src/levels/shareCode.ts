@@ -1,9 +1,14 @@
 /**
  * 分享码：把一张地图（或一组随机参数）压成一串可复制、可粘贴的文本。
  *
- * 格式（字段以 ~ 分隔，避免和 base64url 的 - _ 冲突）：
+ * 对外统一使用**可读化**格式（人类不用记，但一眼能看出是"一张迷宫图"）：
  *   地图  RFM1~<宽 36 进制>~<高 36 进制>~<游程编码>~<校验码>~<标题 base64url>
  *   随机  RFR1~<种子>~<列数>~<行数>~<节点数>~<编织比例×100>
+ *
+ * ⚠️ 这里**没有加密**，也刻意不做"假加密"。原因见文件底部
+ *    `toFriendlyCode()` 的注释：客户端加密必然要把密钥一起发出去，
+ *    在"零服务器、代码全开源"的前提下只会增加体积、挡住源码可读性，
+ *    换不到任何真实的机密性。所以目标是**可读 / 好看**，而不是**看不懂**。
  *
  * 设计要点：
  * - 游程编码对迷宫这种大片连续的墙非常有效，29×19 的地图通常只要一两百字符；
@@ -18,6 +23,19 @@ import { MAP_LIMITS } from './mapAnalysis';
 const MAP_PREFIX = 'RFM1';
 const RANDOM_PREFIX = 'RFR1';
 const SEP = '~';
+/**
+ * 可读化外形的前缀，与内部前缀**同长（4 字符）**，便于整体替换。
+ *
+ * ⚠️ 必须是**两个不同**的前缀，不能统一成 `RESO`：
+ * 前缀是解码侧唯一的类型判别依据。曾经为了"看起来更整齐"把两种码
+ * 都改成 `RESO·…`，结果随机码全被当成地图码解析
+ * （`c29hw` 被读成宽度，报"尺寸 20261012×10 超出范围"）。
+ * 统一的品牌感换来的是**类型信息丢失**，得不偿失。
+ */
+const FRIENDLY_MAP_PREFIX = 'RESO';
+const FRIENDLY_RANDOM_PREFIX = 'RESE';
+/** 可读化外形里替换 `~` 的可见分隔符（全角中点） */
+const FRIENDLY_SEP = '·';
 /**
  * 地图字符白名单。^ 尖刺与 * 回声干扰器必须在这里登记，
  * 否则带陷阱的自定义关卡会在解码时被判为非法字符。
@@ -124,11 +142,49 @@ function rleDecode(rle: string, expectedLength: number): string | null {
 
 // ==================== 对外 API ====================
 
-/** 生成地图分享码；title 为空时不写标题字段 */
+/**
+ * 把内部格式（`RFM1~a~b~…`）改写成对人更友好的外形。
+ *
+ * 为什么用 `·`（U+00B7 中点）而不是 `-`：
+ * 正文的 MIME type 是 `text/plain`，**没有任何协议层会吞掉空行**，
+ * 换行可以放心用；而 `·` 在小字号下比 `~` 温顺得多，读起来像"一串编号"，
+ * 不像命令行里粘出来的脏字符。它也不在 base64url 字母表里，不参与数据编码。
+ *
+ * 抽成独立函数是因为**产出点有四处**（编辑器导出、随机种子码复制、
+ * 保存后弹窗、列表分享码 / 通关面板分享码），
+ * 漏掉任何一处都会出现"有的码好看有的码难看"。
+ */
+function toFriendlyCode(internal: string, mapKind: boolean): string {
+  const prefix = mapKind ? FRIENDLY_MAP_PREFIX : FRIENDLY_RANDOM_PREFIX;
+  return prefix + internal.slice(MAP_PREFIX.length).replace(new RegExp(SEP, 'g'), FRIENDLY_SEP);
+}
+
+/**
+ * 生成地图分享码（内部格式；对外展示前经 `toFriendlyCode` 换外形）
+ * @param title 标题；为空时不写标题字段
+ */
 export function encodeMapCode(title: string, rows: string[]): string {
   if (rows.length === 0) throw new Error('地图为空，无法生成分享码。');
   const width = rows[0].length;
   const height = rows.length;
+  /**
+   * 宽度为 0 必须在这里就拒绝，不能放它"编码成功"。
+   *
+   * 真事：`['']`（一行空字符串）曾能一路走到编码完成，产出一条
+   * `RESO·0·1··<校验>·<标题>` 的码 —— 尺寸段是 0、游程段是空，
+   * 弹窗里几乎是**一片空白**，看起来就是"分享码没生成出来"。
+   * 更糟的是这条码**自己被解码器拒绝**（"尺寸 0×1 超出允许范围"），
+   * 即生成了一条不可能被任何人使用的死码。
+   *
+   * 判据与 `analyzeRows()` 保持一致（它同样以"首行长度为 0"作为硬错误），
+   * 这样"能不能编码"和"能不能游玩"不会出现两套标准。
+   */
+  if (width === 0) throw new Error('地图为空，无法生成分享码。');
+  // 行宽不一致的地图同样编不出可解码的码（解码会按 width×height 还原成错行），
+  // 这里一并拦下，避免产出"解出来和原图不一样"的码。
+  for (let y = 1; y < height; y += 1) {
+    if (rows[y].length !== width) throw new Error('地图行列宽度不一致，无法生成分享码。');
+  }
   const rle = rleEncode(rows);
   const encodedTitle = title.trim()
     ? toBase64Url(new TextEncoder().encode(title.trim().slice(0, 24)))
@@ -138,10 +194,20 @@ export function encodeMapCode(title: string, rows: string[]): string {
   return [MAP_PREFIX, toBase36(width), toBase36(height), rle, ck, encodedTitle].join(SEP);
 }
 
-/** 生成随机参数分享码（同一种子 + 参数必定生成同一张地图） */
+/**
+ * 生成地图分享码的**可读化外形**：这个才是给用户看、给用户发的那串。
+ *
+ * 与 `encodeMapCode` 的唯一差别是外形（前缀 + 分隔符），
+ * 解码侧两条都认，所以新旧码互不影响。
+ */
+export function encodeMapShareText(title: string, rows: string[]): string {
+  return toFriendlyCode(encodeMapCode(title, rows), true);
+}
+
+/** 生成随机参数分享码（同一种子 + 参数必定生成同一张地图）；返回可读化外形 */
 export function encodeRandomCode(params: RandomLevelParams): string {
   const p = clampParams(params);
-  return [
+  const internal = [
     RANDOM_PREFIX,
     toBase36(p.seed),
     toBase36(p.cols),
@@ -149,14 +215,48 @@ export function encodeRandomCode(params: RandomLevelParams): string {
     toBase36(p.nodes),
     toBase36(Math.round(p.braid * 100))
   ].join(SEP);
+  return toFriendlyCode(internal, false);
 }
 
 /**
- * 解析分享码。
+ * 把用户粘贴的任意外形统一成内部格式。
+ *
+ * 这一步是"美化外形"能成立的前提：只要在这里收口，
+ * 解码逻辑（含校验和、尺寸检查、RLE 校验）一行都不用动，
+ * 也就不会因为换外形而引入新的解析漏洞。
+ *
+ * ⚠️ **只规范前缀，其余字段一律原样保留**。
+ * 这里踩过一次坑：曾顺手对整串（或"除标题外全部"）做 `toUpperCase()`，
+ * 结果两处同时坏掉 ——
+ *   ① 标题段是 base64url，大小写是有效载荷，大写后校验和必然对不上；
+ *   ② RLE 段是 `<36 进制计数><地图字符>` 交替，计数用小写字母，
+ *      大写后 `rleDecode` 的 `[0-9a-z]` 扫描会在字母处停下，整段错位。
+ * 症状都是"明明原样复制的码却报『分享码校验失败』"。
+ * 真正需要容错的只有**前缀的大小写**（头是固定字面量），
+ * 而且编码侧本来就输出全小写，所以放宽前缀不会削弱任何校验强度。
+ */
+function normalizeShareText(raw: string): string {
+  // 只把中点换成内部分隔符，**不能顺手认半角点**：
+  // `.` 正是地图字符（地面），全局替换会把地图内容一起改掉 ——
+  // 实测表现为"原样复制的码报『分享码校验失败』"，因为 RLE 段被改写了。
+  // 分隔符容错的空间到此为止，宁可让手打的码报格式错误，也不能冒改坏地图的风险。
+  const unified = raw.trim().replace(new RegExp(FRIENDLY_SEP, 'g'), SEP).replace(/\s+/g, '');
+  if (!unified) return '';
+
+  const parts = unified.split(SEP);
+  const head = parts[0].toUpperCase();
+  if (head === FRIENDLY_MAP_PREFIX) parts[0] = MAP_PREFIX;
+  else if (head === FRIENDLY_RANDOM_PREFIX) parts[0] = RANDOM_PREFIX;
+  else parts[0] = head; // 认不出就原样留着，交给下游报"格式错误"
+  return parts.join(SEP);
+}
+
+/**
+ * 解析分享码。新旧两种外形都接受。
  * 任何格式错误都抛出带中文原因的 Error，调用方直接把文案提示给用户即可。
  */
 export function decodeShareCode(raw: string): SharePayload {
-  const code = raw.replace(/\s+/g, '').trim();
+  const code = normalizeShareText(raw);
   if (code.length === 0) throw new Error('分享码为空。');
 
   const parts = code.split(SEP);
@@ -223,11 +323,11 @@ export function decodeShareCode(raw: string): SharePayload {
     };
   }
 
-  throw new Error('无法识别的分享码格式（应以 RFM1~ 或 RFR1~ 开头）。');
+  throw new Error('无法识别的分享码格式（应以 RESO· 或 RESE· 开头）。');
 }
 
-/** 判断一段文本是否像分享码（用于给出更友好的提示） */
+/** 判断一段文本是否像分享码（用于给出更友好的提示）；两种外形都认 */
 export function looksLikeShareCode(text: string): boolean {
-  const head = text.replace(/\s+/g, '').slice(0, 4).toUpperCase();
+  const head = normalizeShareText(text).slice(0, 4);
   return head === MAP_PREFIX || head === RANDOM_PREFIX;
 }

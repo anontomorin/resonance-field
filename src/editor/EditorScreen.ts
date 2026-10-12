@@ -9,7 +9,7 @@
 import { TileCode } from '../world/TileType';
 import { analyzeRows, MAP_LIMITS, MapReport } from '../levels/mapAnalysis';
 import { LevelDefinition } from '../levels/levelData';
-import { encodeMapCode } from '../levels/shareCode';
+import { encodeMapCode, encodeMapShareText } from '../levels/shareCode';
 import { CustomLevelRecord } from '../core/CustomLevelStore';
 import { buildRandomMap } from '../gen/LevelGenerator';
 import { randomSeed } from '../gen/randomParams';
@@ -433,11 +433,13 @@ export class EditorScreen {
       this.flashIssues('地图还不完整，导出前请先修好报错项。');
       return;
     }
-    const level = this.buildLevel();
+    // 导出的是**可读化外形**（RESO·…），不走 buildLevel()：
+    // buildLevel().code 是内部格式，给解析用；弹窗里展示的必须是给用户看的那串。
+    const title = this.title.length > 0 ? this.title : '未命名关卡';
     this.shareDialog.show(
       '导出分享码',
       '把这串文字发给朋友，对方在「我的关卡 → 导入分享码」粘贴即可玩到这张地图。',
-      level.code ?? ''
+      encodeMapShareText(title, this.rows)
     );
   }
 

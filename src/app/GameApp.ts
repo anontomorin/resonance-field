@@ -20,7 +20,7 @@ import { EditorScreen } from '../editor/EditorScreen';
 import { buildRandomLevel } from '../gen/LevelGenerator';
 import { RandomLevelParams, randomSeed } from '../gen/randomParams';
 import { analyzeRows, firstError, normalizeTitle } from '../levels/mapAnalysis';
-import { decodeShareCode, encodeRandomCode } from '../levels/shareCode';
+import { decodeShareCode, encodeMapCode, encodeMapShareText, encodeRandomCode } from '../levels/shareCode';
 import { starsFor, starComment, Stars } from '../game/StarRating';
 
 interface LevelStat {
@@ -505,6 +505,7 @@ export class GameApp {
       this.setState('levelComplete');
       this.hud.hide();
       const fromEditor = this.external?.fromEditor === true;
+      const customId = level.customId;
       this.completePanel.show({
         levelTitle: level.title,
         activated: session.activatedCount,
@@ -539,7 +540,12 @@ export class GameApp {
                   this.gotoLevelCenter('custom');
                 }
               },
-              { label: '再玩一次', onClick: () => this.replayCurrent() }
+              { label: '再玩一次', onClick: () => this.replayCurrent() },
+              // "刚打完一关"是分享欲最强的时刻。以前必须先退回列表再点「分享码」，
+              // 现在直接就在结算面板上——同一串码，少两次点击。
+              ...(customId
+                ? [{ label: '分享码', onClick: () => this.shareCustom(customId) }]
+                : [])
             ]
       });
     }
@@ -641,13 +647,66 @@ export class GameApp {
       id: 0,
       source: 'custom',
       customId: record.id,
-      code: undefined,
+      // code 是"解析用的内部格式"，不是给用户看的。
+      //
+      // 早期这里写死成 `code: undefined`，于是 shareCustom() / saveCustom() 里的
+      // `level.code ?? ''` 永远落到空串，弹窗打开是一条空白。
+      // 现在弹窗那条线改走 shareTextOf()（可读化外形），这里保留真码，
+      // 供任何需要"再解析一次"的调用方使用，同时杜绝 `?? ''` 兜底再次退化成空白。
+      code: this.internalCodeOf(record),
       title: record.title,
       subtitle: `${record.map[0]?.length ?? 0} × ${record.map.length} · ${nodes} 节点`,
       requiredResonators: nodes,
       hint: [],
       map: record.map
     };
+  }
+
+  /**
+   * 内部格式（`RFM1~…`）。`encodeMapCode` 对空地图会抛错，
+   * 而 localStorage 里的记录理论上可能被外部改坏，所以兜一层返回空串；
+   * 由调用方决定"空码"该怎么提示，而不是让异常冒到主循环打断整局游戏。
+   */
+  private internalCodeOf(record: CustomLevelRecord): string {
+    try {
+      return encodeMapCode(record.title, record.map);
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * 可读化外形（`RESO·…`）：弹窗里展示、复制给朋友的都必须是这一串。
+   *
+   * 失败时返回空串。失败原因有两种，都要当成"没有码"来处理：
+   *   ① `encodeMapCode` 抛错（空地图、行宽不一致）—— 由 catch 兜住；
+   *   ② 生成了码，但这条码**连自己的解码器都不接受**（例如历史上出现过的
+   *      宽度 0 死码 `RESO·0·1··…`）。只靠 try/catch 是拦不住 ② 的，
+   *      因为它在编码侧完全"合法"。
+   *
+   * 所以这里补一道**自检**：编出来立刻解一遍，解不开就当作没有码。
+   * 这一层是防御性的 —— 它保证"弹窗里出现的码，一定是一串能被别人导入的码"，
+   * 无论上游又漏了哪种非法输入。
+   */
+  private shareTextOf(record: CustomLevelRecord): string {
+    let code = '';
+    try {
+      code = encodeMapShareText(record.title, record.map);
+    } catch {
+      return '';
+    }
+    if (code.length === 0) return '';
+    try {
+      decodeShareCode(code);
+      return code;
+    } catch {
+      return '';
+    }
+  }
+
+  /** 给"生不出码"的统一提示，避免调用方各自编文案 */
+  private shareErrorText(record: CustomLevelRecord): string {
+    return `《${record.title}》内容为空或已损坏，无法生成分享码。请打开编辑器确认地图至少有一行内容。`;
   }
 
   private saveCustom(input: { id: string; title: string; map: string[] }): void {
@@ -661,22 +720,35 @@ export class GameApp {
     // 列表 DOM 由 show() 时才渲染，保存时若不主动重画，
     // 返回关卡中心看到的会是保存前的旧列表（刚存的关卡"消失"）。
     this.levelCenter.refreshCustom();
-    const level = this.levelFromRecord(record);
+    const code = this.shareTextOf(record);
+    // 保存路径理论上拿得到码（编辑器已用 report.playable 守住空地图），
+    // 但"保存成功却弹出空白分享码"是最伤的一类失败，所以同样兜一层：
+    // 宁可只提示"已保存"、不弹分享框，也不让用户看到一条空码。
+    if (code.length === 0) {
+      this.levelCenter.show('custom');
+      this.levelCenter.setMessage('custom', `《${record.title}》已保存。${this.shareErrorText(record)}`, 'error');
+      return;
+    }
     this.share.show(
       '已保存到我的关卡',
       `《${record.title}》已保存。下面是它的分享码，发给朋友即可让他玩到这张地图。`,
-      level.code ?? ''
+      code
     );
   }
 
   private shareCustom(id: string): void {
     const record = this.store.get(id);
     if (!record) return;
-    const level = this.levelFromRecord(record);
+    const code = this.shareTextOf(record);
+    if (code.length === 0) {
+      this.levelCenter.show('custom');
+      this.levelCenter.setMessage('custom', this.shareErrorText(record), 'error');
+      return;
+    }
     this.share.show(
       '分享码',
       `把《${record.title}》的分享码发给朋友，对方在「我的关卡 → 导入分享码」粘贴即可。`,
-      level.code ?? ''
+      code
     );
   }
 

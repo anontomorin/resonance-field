@@ -1677,6 +1677,27 @@ body.touch-enabled .padhint {
   word-break: break-all;
 }
 
+/* 描述与字符计数同行：描述左对齐占满，计数右对齐不换行。
+   长码会在窄屏把描述挤成两行，此时计数仍要留在右上角当"刻度"。 */
+.share-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.share-head .panel-desc {
+  margin: 0;
+}
+
+.share-len {
+  flex: none;
+  font-family: var(--mono);
+  font-size: var(--fs-xxs);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
 .share-code:focus {
   outline: none;
   border-color: var(--amber);

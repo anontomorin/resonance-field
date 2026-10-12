@@ -13,6 +13,7 @@ export class ShareDialog {
   private titleEl: HTMLElement;
   private descEl: HTMLElement;
   private codeEl: HTMLTextAreaElement;
+  private lenEl: HTMLElement;
   private msgEl: HTMLElement;
   private msgTimer = 0;
 
@@ -21,6 +22,7 @@ export class ShareDialog {
     this.titleEl = requireEl('share-title');
     this.descEl = requireEl('share-desc');
     this.codeEl = requireEl('share-code') as HTMLTextAreaElement;
+    this.lenEl = requireEl('share-len');
     this.msgEl = requireEl('share-msg');
 
     requireEl('btn-share-close').addEventListener('click', () => this.hide());
@@ -37,6 +39,9 @@ export class ShareDialog {
     this.titleEl.textContent = title;
     this.descEl.textContent = desc;
     this.codeEl.value = code;
+    // 码长是"这串是不是被截断了"最直观的信号，所以每次 show 都要重算，
+    // 不能只在 constructor 里初始化一次。
+    this.lenEl.textContent = `${code.length} 字符`;
     this.setMessage('');
     this.root.classList.remove('hidden');
   }

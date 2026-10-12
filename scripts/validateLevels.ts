@@ -23,6 +23,7 @@ import { starsFor, thresholdsFor } from '../src/game/StarRating';
 import {
   decodeShareCode,
   encodeMapCode,
+  encodeMapShareText,
   encodeRandomCode,
   looksLikeShareCode
 } from '../src/levels/shareCode';
@@ -719,6 +720,155 @@ section('分享码');
   }
 
   check('分享码前缀识别', looksLikeShareCode(original) && !looksLikeShareCode('随便一段文字'));
+}
+
+// ---------------------------------------------------------------
+// 可读化外形（RESO·… / RESE·…）
+//
+// 对外的分享码不再用 `RFM1~…`，而是换成 "字母前缀 + 全角中点"。
+// 换外形最容易出的两类问题是**静默的**：要么只有一部分产出点换了，
+// 要么规范化时改坏了某个字段的载荷。所以这里逐条钉住。
+// ---------------------------------------------------------------
+{
+  // ① 两个前缀必须可区分：曾经把地图码和随机码统一成 RESO·，
+  //    结果随机码全被当成地图码解析。
+  const mapCode = encodeMapShareText('外形测试', LEVELS[0].map);
+  const rndCode = encodeRandomCode({ seed: 4242, cols: 8, rows: 6, nodes: 2, braid: 0.1 });
+  check('地图码用 RESO· 开头', mapCode.startsWith('RESO·'), mapCode.slice(0, 12) + '…');
+  check('随机码用 RESE· 开头', rndCode.startsWith('RESE·'), rndCode.slice(0, 12) + '…');
+  check(
+    '两种可读化外形前缀不同（否则随机码会被当地图码解析）',
+    mapCode.slice(0, 4) !== rndCode.slice(0, 4)
+  );
+
+  // ② 可读化外形里不应再有内部标记
+  check('可读化外形不含 ~ 与 RFM1/RFR1', !/[~]/.test(mapCode) && !mapCode.includes('RFM1'));
+
+  // ③ 往返
+  const dm = decodeShareCode(mapCode);
+  check(
+    '可读化地图码往返一致',
+    dm.kind === 'map' && dm.title === '外形测试' && dm.rows.join('') === LEVELS[0].map.join('')
+  );
+  const dr = decodeShareCode(rndCode);
+  check('可读化随机码往返一致', dr.kind === 'random' && dr.params.seed === 4242);
+
+  // ④ 存量兼容：旧格式（内部格式）必须继续可解析，否则老分享码全失效
+  const legacy = encodeMapCode('老码', LEVELS[0].map);
+  const dl = decodeShareCode(legacy);
+  check(
+    '旧的内部格式分享码仍可解析（向后兼容）',
+    dl.kind === 'map' && dl.rows.join('') === LEVELS[0].map.join('')
+  );
+
+  // ⑤ 大小写容错只放宽前缀：曾经对整串 toUpperCase，
+  //    把 base64url 标题段和 RLE 的 36 进制计数一起改坏。
+  const lowerHead = 'reso' + mapCode.slice(4);
+  const dLower = decodeShareCode(lowerHead);
+  check(
+    '可读化外形前缀大小写容错',
+    dLower.kind === 'map' && dLower.rows.join('') === LEVELS[0].map.join('')
+  );
+
+  // 标题段含 base64url 的大小写敏感字符，必须原样往返
+  const mixedTitle = 'AaZz09测试';
+  const tCode = encodeMapShareText(mixedTitle, LEVELS[0].map);
+  const dT = decodeShareCode(tCode);
+  check(
+    '大小写敏感的标题不被规范化改坏',
+    dT.kind === 'map' && dT.title === mixedTitle,
+    dT.kind === 'map' ? dT.title : ''
+  );
+
+  // ⑥ 折行 / 空白仍要能解析（该外形专为聊天软件传播设计）
+  const wrappedFriendly = mapCode.slice(0, 30) + '\n  ' + mapCode.slice(30);
+  let wrapOk = true;
+  try {
+    const d = decodeShareCode(wrappedFriendly);
+    wrapOk = d.kind === 'map' && d.rows.join('') === LEVELS[0].map.join('');
+  } catch {
+    wrapOk = false;
+  }
+  check('可读化外形被折行后仍可解析', wrapOk);
+
+  // ⑦ 防篡改不因换外形而削弱
+  //
+  // 用"翻转校验码段的最后一个字符"来构造篡改，而不是去替换地图内容里的某个
+  // 子串 —— 后者依赖具体关卡的地图内容，换一张图就静默失效了
+  // （第一版写成 mapCode.replace(/o#1/, 'X#1')，因为第 1 关地图里没有这个子串，
+  //   替换没发生，于是"篡改后仍能解析"被判为失败——其实是用例本身没生效）。
+  // 改成按 `·` 切段、动第 5 段（校验码），与地图内容完全解耦。
+  const badParts = mapCode.split('·');
+  const ckIdx = badParts.length - 2; // [前缀,宽,高,rle,校验码,(标题)]
+  const ckText = badParts[ckIdx];
+  badParts[ckIdx] = ckText.slice(0, -1) + (ckText.endsWith('0') ? '1' : '0');
+  const badFriendly = badParts.join('·');
+  let friendlyRejected = false;
+  try {
+    decodeShareCode(badFriendly);
+  } catch {
+    friendlyRejected = true;
+  }
+  check(
+    '可读化外形被篡改仍会被拒绝',
+    friendlyRejected && badFriendly !== mapCode,
+    `篡改前 ${mapCode.length} 字符 / 篡改后仍等长`
+  );
+
+  // ⑧ 空行地图不能产出"看起来像空白"的死码。
+  //
+  // 真实缺陷：localStorage 里的记录被改坏成 `map: ['']` 时，
+  // `encodeMapCode` 只检查了 `rows.length === 0`，**没检查行宽**，
+  // 于是一路编码成功，产出 `RESO·0·1··<校验>·<标题>`：尺寸段是 0、
+  // 游程段是空，弹窗里几乎一片空白，用户看到的就是"分享码又没生成出来"。
+  // 而且这条码**自己的解码器都不接受**（"尺寸 0×1 超出允许范围"），
+  // 即"生成了一条谁也导入不了的码"—— 比直接报错更糟。
+  let emptyRowThrew = false;
+  try {
+    encodeMapShareText('坏记录', ['']);
+  } catch {
+    emptyRowThrew = true;
+  }
+  check('空行地图（[""]）会被拒绝而不是生成宽度 0 的死码', emptyRowThrew);
+
+  // 行宽不一致同样编不出可解码的码：解码按 width×height 还原会把行切错。
+  let raggedThrew = false;
+  try {
+    encodeMapShareText('参差地图', ['####', '#####', '####', '#####']);
+  } catch {
+    raggedThrew = true;
+  }
+  check('行宽不一致的地图会被拒绝', raggedThrew);
+
+  // ⑨ 泛化的不变量：**凡是能生成出来的码，都必须能被自己的解码器接受**。
+  //    这条比逐个枚举非法输入更耐久 —— 将来再漏哪种输入，都会被它抓住。
+  //
+  //    ⚠️ 这里的地图必须是**真正合法**的（尺寸落在 MAP_LIMITS 内）。
+  //    第一版放了张 11×1 的"单行地图"，结果被抓出来 —— 但那是**解码器的尺寸校验
+  //    在正常工作**，不是缺陷。用例本身不合法，断言方式没错。
+  const selfConsistent: Array<[string, string[]]> = [
+    ['正常地图', LEVELS[0].map],
+    ['最小尺寸地图', ['#####', '#S..#', '#...#', '#R.E#', '#####']],
+    ['带陷阱与干扰器', ['#######', '#S^..*#', '#..#..#', '#R...E#', '#######']]
+  ];
+  let selfOk = true;
+  let selfDetail = '';
+  for (const [name, rows] of selfConsistent) {
+    try {
+      const c = encodeMapShareText(name, rows);
+      const d = decodeShareCode(c);
+      if (d.kind !== 'map') {
+        selfOk = false;
+        selfDetail = `${name}: 解出来不是地图`;
+        break;
+      }
+    } catch (error) {
+      selfOk = false;
+      selfDetail = `${name}: ${(error as Error).message}`;
+      break;
+    }
+  }
+  check('凡能生成的码都能被自己的解码器接受', selfOk, selfDetail || '3 张地图全部自洽');
 }
 
 {
