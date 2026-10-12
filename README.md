@@ -44,10 +44,21 @@ npm run validate   # 运行算法 / 关卡 / 陷阱 / 随机关卡 / 分享码�
 仓库自带自动化 workflow（`.github/workflows/deploy.yml`）：推送到 `main` 即自动
 「校验 → 构建 → 发布」。**你只需要写一次 Pages 设置，之后每次 `git push` 就会自动上线。**
 
-### 首次设置（只需做一次）
+### 首次设置（只需做一次，且必须在首次推送后立即做）
+
+**必须先把 Pages 的 Source 设为 "GitHub Actions"，否则部署会失败。**
 
 打开 https://github.com/anontomorin/resonance-field/settings/pages ，
-把 **Source** 选为 **GitHub Actions**，保存。
+在 **Build and deployment → Source** 下拉里选择 **GitHub Actions**（不要选
+"Deploy from a branch"），保存。
+
+> **为什么必须先设这一步**：workflow 里的 `actions/configure-pages` 会调用
+> GitHub Pages API。如果 Source 还没设为 "GitHub Actions"，该 API 返回 404，
+> 于是 CI 在「配置 Pages」这一步失败——而**前面的校验与构建其实都已成功**。
+> 仓库未启用 Pages 时，`GET /repos/{owner}/{repo}/pages` 也是 404。
+>
+> 设好之后，到 https://github.com/anontomorin/resonance-field/actions
+> 找到失败的那次运行，点 **Re-run all jobs** 重新跑一遍即可（不必重新提交）。
 
 ### 日常更新
 
