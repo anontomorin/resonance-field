@@ -38,27 +38,42 @@ npm run validate   # 运行算法 / 关卡 / 陷阱 / 随机关卡 / 分享码�
 
 ## 部署到 GitHub Pages
 
-仓库已带好自动化 workflow（`.github/workflows/deploy.yml`），推送即上线：
+已托管在 **https://github.com/anontomorin/resonance-field**，线上地址
+**https://anontomorin.github.io/resonance-field/**。
 
-1. 在 GitHub 新建一个**空的**仓库（不要勾选自动生成 README / .gitignore）。
-2. 本地关联并推送：
+仓库自带自动化 workflow（`.github/workflows/deploy.yml`）：推送到 `main` 即自动
+「校验 → 构建 → 发布」。**你只需要写一次 Pages 设置，之后每次 `git push` 就会自动上线。**
 
-   ```bash
-   git init
-   git add .
-   git commit -m "《共振场：回声之间》初始提交"
-   git branch -M main
-   git remote add origin https://github.com/<你的用户名>/<仓库名>.git
-   git push -u origin main
-   ```
+### 首次设置（只需做一次）
 
-3. 打开仓库 **Settings → Pages**，把 **Source** 选为 **GitHub Actions**（只需设置一次）。
-4. 之后每次 `git push` 到 `main`，CI 会自动执行「校验 → 构建 → 发布」，
-   几十秒后即可通过 `https://<你的用户名>.github.io/<仓库名>/` 访问。
+打开 https://github.com/anontomorin/resonance-field/settings/pages ，
+把 **Source** 选为 **GitHub Actions**，保存。
 
-**关于凭据**：workflow 使用的是 GitHub 在 CI 中**自动注入**的 `GITHUB_TOKEN`
-（见文件里的 `permissions:` 段），**不需要、也不应该**在仓库或本地保存任何个人访问令牌（PAT）。
-推送时由 Git 自行弹出凭据窗口，或用 SSH key。
+### 日常更新
+
+```bash
+git add .
+git commit -m "你的改动说明"
+git push
+```
+
+推送后到 https://github.com/anontomorin/resonance-field/actions 可以看到进度，
+几十秒后 `https://anontomorin.github.io/resonance-field/` 就会更新。
+
+### 关于凭据
+
+workflow 使用的是 GitHub 在 CI 中**自动注入**的 `GITHUB_TOKEN`
+（见 `deploy.yml` 里的 `permissions:` 段），
+**不需要、也不应该**在仓库或本地保存任何个人访问令牌（PAT）。
+推送时由 Git 自带的凭据管理器或 SSH key 处理。
+
+```bash
+# 查看远端配置
+git remote -v
+# 期望输出：
+# origin  https://github.com/anontomorin/resonance-field.git (fetch)
+# origin  https://github.com/anontomorin/resonance-field.git (push)
+```
 
 ## 操作方式
 
