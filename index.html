@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>共振场：回声之间</title>
+    <script type="module" crossorigin src="./assets/index-ZWesKUMx.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BxrZTIZr.css">
+  </head>
+  <body>
+    <div id="app">
+      <!-- ===================== 游戏画布 ===================== -->
+      <div id="stage">
+        <canvas id="game-canvas"></canvas>
+
+        <!-- 游戏内 HUD -->
+        <div id="hud" class="hud hidden">
+          <div class="hud-top">
+            <div class="hud-left">
+              <div class="hud-level" id="hud-level-name">初次回响</div>
+              <div class="hud-sub" id="hud-level-sub">发出第一声回响</div>
+            </div>
+            <div class="hud-center">
+              <div class="stat">
+                <span class="stat-label">节点</span>
+                <span class="stat-value" id="hud-nodes">0 / 1</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">生命</span>
+                <span class="stat-value hearts" id="hud-health"></span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">用时</span>
+                <span class="stat-value" id="hud-time">00:00</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">脉冲</span>
+                <span class="stat-value" id="hud-pulses">0</span>
+              </div>
+            </div>
+            <div class="hud-right">
+              <button class="btn ghost" id="btn-sound" type="button" title="声音开关">声音：关</button>
+              <button class="btn ghost" id="btn-pause" type="button">暂停</button>
+              <button class="btn ghost" id="btn-restart" type="button">重开</button>
+            </div>
+          </div>
+
+          <div class="tipbar hidden" id="hud-tip"></div>
+
+          <div class="hud-bottom">
+            <div class="keyhint">
+              <span><b>WASD</b> / <b>方向键</b> 移动</span>
+              <span><b>Space</b> 发射声波</span>
+              <span><b>R</b> 重开</span>
+              <span><b>Esc</b> 暂停</span>
+            </div>
+            <div class="touchhint">
+              <span><b>左下摇杆</b> 移动</span>
+              <span><b>声波</b> 按钮发射</span>
+              <span>右上角按钮可重开 / 暂停</span>
+            </div>
+            <div class="cooldown">
+              <span class="cooldown-label">脉冲充能</span>
+              <div class="cooldown-bar"><div class="cooldown-fill" id="cooldown-fill"></div></div>
+            </div>
+          </div>
+
+          <div class="toast" id="hud-toast"></div>
+        </div>
+      </div>
+
+      <!-- ===================== 触摸控制（移动端） ===================== -->
+      <div id="touch-controls" class="touch-controls">
+        <div class="joystick" id="joystick">
+          <div class="joystick-knob" id="joystick-knob"></div>
+          <div class="joystick-hint">移动</div>
+        </div>
+        <div class="touch-actions">
+          <button class="touch-btn" id="touch-pulse" type="button">声波</button>
+        </div>
+      </div>
+
+      <!-- ===================== 首页 ===================== -->
+      <div class="overlay screen" id="overlay-title">
+        <div class="home">
+          <div class="home-brand">
+            <div class="title-mark">RESONANCE FIELD</div>
+            <h1 class="game-title">共振场：回声之间</h1>
+            <p class="game-tagline">发出回响，感知未知，寻找通路</p>
+          </div>
+
+          <!-- 三步循环：让玩家在点进第一关之前就知道这个游戏在干什么 -->
+          <ol class="loop-strip">
+            <li class="loop-step">
+              <span class="loop-num">1</span>
+              <span class="loop-name">移动</span>
+              <span class="loop-desc">在黑暗里摸索，撞墙不算惩罚</span>
+            </li>
+            <li class="loop-step">
+              <span class="loop-num">2</span>
+              <span class="loop-name">发声波</span>
+              <span class="loop-desc">沿通道扩散 8 格，照亮周围结构</span>
+            </li>
+            <li class="loop-step">
+              <span class="loop-num">3</span>
+              <span class="loop-name">共振</span>
+              <span class="loop-desc">激活全部节点，开启出口离开</span>
+            </li>
+          </ol>
+
+          <div class="mode-grid">
+            <button class="mode-card" id="mode-campaign" type="button">
+              <span class="mode-icon">01</span>
+              <span>
+                <span class="mode-name">主线关卡</span>
+                <span class="mode-desc">教学关 + 4 张手工关卡，逐关解锁</span>
+              </span>
+              <span class="mode-meta" id="mode-campaign-meta">0 / 5</span>
+            </button>
+            <button class="mode-card" id="mode-random" type="button">
+              <span class="mode-icon">02</span>
+              <span>
+                <span class="mode-name">随机回声</span>
+                <span class="mode-desc">每次生成一张新迷宫，种子可分享</span>
+              </span>
+              <span class="mode-meta">无限</span>
+            </button>
+            <button class="mode-card" id="mode-custom" type="button">
+              <span class="mode-icon">03</span>
+              <span>
+                <span class="mode-name">我的关卡</span>
+                <span class="mode-desc">自己画地图，导出分享码给朋友</span>
+              </span>
+              <span class="mode-meta" id="mode-custom-meta">0 张</span>
+            </button>
+          </div>
+
+          <div class="home-actions">
+            <button class="btn ghost" id="btn-help" type="button">操作说明</button>
+            <button class="btn ghost" id="btn-sound-title" type="button">声音：关</button>
+          </div>
+
+          <div class="help-box hidden" id="help-box">
+            <h3>操作说明</h3>
+            <ul>
+              <li><b>W A S D</b> 或 <b>方向键</b>：在网格中移动一格，无法穿过墙壁。</li>
+              <li><b>空格 Space</b>：从当前位置发射一次声波脉冲，脉冲沿通道传播最多 8 格。</li>
+              <li><b>移动端</b>：左下摇杆移动，右下「声波」按钮发射脉冲，右上角可重开与暂停。</li>
+              <li><b>R</b>：重新开始当前关卡。<b>Esc</b>：暂停 / 继续。</li>
+              <li>声波<b>不能穿墙</b>：墙后的区域必须绕行到另一条通路后才能被探测到。</li>
+              <li>被声波触及的<b>共振节点</b>（暖黄色）会被永久激活。</li>
+              <li>激活全部必需节点后，<b>出口</b>开启，走进出口即可通关。</li>
+              <li><b>尖刺</b>（红）扣血，<b>回声干扰器</b>（紫）会清空你已记住的地图。</li>
+              <li>陷阱被声波扫到后会留下警示标记，记得绕开它们。</li>
+              <li>通关按<b>脉冲次数</b>评星：三星线 = 理论最优次数 + 1。</li>
+              <li><b>随机关卡</b>由种子生成，同一种子必定是同一张地图，可以复制种子码分享。</li>
+              <li><b>我的关卡</b>可以自己画地图，保存后再导出分享码发给朋友。</li>
+            </ul>
+          </div>
+
+          <p class="foot-note">纯前端作品 · Vite + TypeScript + Canvas 2D</p>
+        </div>
+      </div>
+
+      <!-- ===================== 关卡中心 ===================== -->
+      <div class="overlay screen hidden" id="overlay-levels">
+        <div class="shell">
+          <header class="shell-head">
+            <div>
+              <h2 class="shell-title">关卡中心</h2>
+              <p class="shell-sub" id="levels-sub">选择要进入的共振场</p>
+            </div>
+            <button class="btn ghost" id="btn-levels-back" type="button">返回首页</button>
+          </header>
+
+          <nav class="tabs" id="level-tabs">
+            <button class="tab active" data-tab="campaign" type="button">主线关卡</button>
+            <button class="tab" data-tab="random" type="button">随机回声</button>
+            <button class="tab" data-tab="custom" type="button">我的关卡</button>
+          </nav>
+
+          <!-- 主线 -->
+          <section class="tab-panel" id="tab-campaign">
+            <div class="level-grid" id="level-grid"></div>
+            <div class="panel-foot">
+              <button class="btn ghost" id="btn-reset-progress" type="button">清空主线进度</button>
+            </div>
+          </section>
+
+          <!-- 随机 -->
+          <section class="tab-panel hidden" id="tab-random">
+            <div class="setup">
+              <div class="field">
+                <span class="field-label">规模</span>
+                <div class="chip-row" id="random-presets"></div>
+              </div>
+
+              <div class="field">
+                <label class="field-label" for="random-seed">种子</label>
+                <div class="row">
+                  <input class="input" id="random-seed" autocomplete="off" spellcheck="false" />
+                  <button class="btn" id="btn-random-dice" type="button">换一个</button>
+                </div>
+                <p class="field-hint">相同种子必定生成同一张地图，复制种子码就能让朋友玩到同一张。</p>
+              </div>
+
+              <div class="row wrap">
+                <button class="btn primary" id="btn-random-start" type="button">生成并游玩</button>
+                <button class="btn" id="btn-random-copy" type="button">复制种子码</button>
+              </div>
+
+              <div class="divider"><span>导入朋友分享的地图</span></div>
+
+              <div class="field">
+                <label class="field-label" for="random-code">分享码</label>
+                <div class="row">
+                  <input
+                    class="input"
+                    id="random-code"
+                    placeholder="RFM1~... 或 RFR1~..."
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <button class="btn" id="btn-random-import" type="button">导入并游玩</button>
+                </div>
+                <p class="field-msg" id="random-import-msg"></p>
+              </div>
+            </div>
+          </section>
+
+          <!-- 我的关卡 -->
+          <section class="tab-panel hidden" id="tab-custom">
+            <div class="setup">
+              <div class="row wrap">
+                <button class="btn primary" id="btn-editor-new" type="button">新建关卡</button>
+              </div>
+
+              <div class="empty hidden" id="custom-empty">
+                还没有自定义关卡。点「新建关卡」自己画一张，或导入朋友的分享码。
+              </div>
+              <div class="custom-list" id="custom-list"></div>
+
+              <div class="divider"><span>导入分享码</span></div>
+
+              <div class="field">
+                <div class="row">
+                  <input
+                    class="input"
+                    id="custom-code"
+                    placeholder="RFM1~..."
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <button class="btn" id="btn-custom-import" type="button">导入</button>
+                </div>
+                <p class="field-msg" id="custom-import-msg"></p>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- ===================== 编辑器 ===================== -->
+      <div class="overlay screen hidden" id="overlay-editor">
+        <div class="shell editor-shell">
+          <header class="shell-head">
+            <div>
+              <h2 class="shell-title" id="editor-head">新建关卡</h2>
+              <p class="shell-sub">按住拖动可连续绘制；出生点与出口各只能有一个</p>
+            </div>
+            <button class="btn ghost" id="btn-editor-back" type="button">返回</button>
+          </header>
+
+          <div class="editor-body">
+            <aside class="editor-side">
+              <div class="field">
+                <label class="field-label" for="editor-title">关卡名称</label>
+                <input class="input" id="editor-title" maxlength="24" placeholder="我的第一张地图" />
+              </div>
+
+              <div class="field">
+                <span class="field-label">画笔</span>
+                <div class="palette" id="editor-palette"></div>
+              </div>
+
+              <div class="field">
+                <span class="field-label">尺寸</span>
+                <div class="row">
+                  <input class="input tiny" id="editor-width" type="number" />
+                  <span class="times">×</span>
+                  <input class="input tiny" id="editor-height" type="number" />
+                  <button class="btn" id="btn-editor-resize" type="button">应用</button>
+                </div>
+                <p class="field-hint">宽 9~61，高 7~41，超出部分会被裁剪。</p>
+              </div>
+
+              <div class="field">
+                <span class="field-label">快捷操作</span>
+                <div class="side-actions">
+                  <button class="btn" id="btn-editor-maze" type="button">生成迷宫</button>
+                  <button class="btn" id="btn-editor-clear" type="button">清空为地面</button>
+                  <button class="btn" id="btn-editor-border" type="button">补外边框</button>
+                </div>
+              </div>
+
+              <div class="field grow">
+                <span class="field-label">校验结果</span>
+                <ul class="issue-list" id="editor-issues"></ul>
+              </div>
+            </aside>
+
+            <main class="editor-main">
+              <div class="editor-grid-wrap" id="editor-grid-wrap">
+                <div class="editor-grid" id="editor-grid"></div>
+              </div>
+              <div class="editor-foot">
+                <div class="editor-stats" id="editor-stats"></div>
+                <div class="row wrap">
+                  <button class="btn" id="btn-editor-test" type="button">试玩</button>
+                  <button class="btn" id="btn-editor-save" type="button">保存到我的关卡</button>
+                  <button class="btn primary" id="btn-editor-share" type="button">导出分享码</button>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== 分享码弹窗 ===================== -->
+      <div class="overlay hidden" id="overlay-share">
+        <div class="panel wide">
+          <h2 class="panel-title" id="share-title">分享码</h2>
+          <p class="panel-desc" id="share-desc">复制这串文字发给朋友，对方在「我的关卡 → 导入分享码」粘贴即可。</p>
+          <textarea class="share-code" id="share-code" readonly rows="3" spellcheck="false"></textarea>
+          <div class="btn-row">
+            <button class="btn primary" id="btn-share-copy" type="button">复制</button>
+            <button class="btn" id="btn-share-close" type="button">关闭</button>
+          </div>
+          <p class="field-msg" id="share-msg"></p>
+        </div>
+      </div>
+
+      <!-- ===================== 暂停面板 ===================== -->
+      <div class="overlay hidden" id="overlay-pause">
+        <div class="panel">
+          <h2 class="panel-title">已暂停</h2>
+          <p class="panel-desc">共振暂时静止。</p>
+          <div class="btn-col">
+            <button class="btn primary" id="btn-resume" type="button">继续游戏</button>
+            <button class="btn" id="btn-pause-restart" type="button">重新开始本关</button>
+            <button class="btn ghost" id="btn-pause-title" type="button">返回关卡中心</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== 通关面板（按钮按关卡来源动态生成） ===================== -->
+      <div class="overlay hidden" id="overlay-complete">
+        <div class="panel">
+          <div class="result-badge">回响已连接</div>
+          <h2 class="panel-title" id="complete-title">关卡完成</h2>
+          <!-- 星级评分：以本局脉冲次数为依据，三星线 = 理论最优 + 1 -->
+          <div class="star-row" id="complete-stars" aria-label="本关星级"></div>
+          <p class="star-comment" id="complete-star-comment"></p>
+          <div class="result-stats">
+            <div><span class="stat-label">激活节点</span><span class="stat-value" id="complete-nodes">1 / 1</span></div>
+            <div><span class="stat-label">用时</span><span class="stat-value" id="complete-time">00:00</span></div>
+            <div><span class="stat-label">脉冲次数</span><span class="stat-value" id="complete-pulses">0</span></div>
+            <div><span class="stat-label">理论最优</span><span class="stat-value" id="complete-par">—</span></div>
+          </div>
+          <div class="btn-col" id="complete-actions"></div>
+        </div>
+      </div>
+
+      <!-- 力竭面板（生命耗尽） -->
+      <div class="overlay hidden" id="overlay-exhausted">
+        <div class="panel">
+          <div class="result-badge danger">回响中断</div>
+          <h2 class="panel-title" id="exhausted-title">力竭</h2>
+          <p class="panel-desc" id="exhausted-desc">
+            生命耗尽，本次探索到此为止。已发现的陷阱位置会保留下来，再来一次会快很多。
+          </p>
+          <div class="result-stats">
+            <div><span class="stat-label">激活节点</span><span class="stat-value" id="exhausted-nodes">0 / 1</span></div>
+            <div><span class="stat-label">坚持时间</span><span class="stat-value" id="exhausted-time">00:00</span></div>
+            <div><span class="stat-label">踩中陷阱</span><span class="stat-value" id="exhausted-hits">0</span></div>
+          </div>
+          <div class="btn-col" id="exhausted-actions"></div>
+        </div>
+      </div>
+
+      <!-- ===================== 最终结算 ===================== -->
+      <div class="overlay hidden" id="overlay-final">
+        <div class="panel">
+          <div class="result-badge gold">全部完成</div>
+          <h2 class="panel-title">所有回响已连接</h2>
+          <p class="panel-desc">你走完了全部共振场，回声之间的空间已经完全显现。</p>
+          <div class="result-stats" id="final-stats"></div>
+          <div class="final-total" id="final-total"></div>
+          <div class="btn-col">
+            <button class="btn primary" id="btn-final-title" type="button">返回首页</button>
+            <button class="btn" id="btn-final-replay" type="button">从第一关重新游玩</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </body>
+</html>
