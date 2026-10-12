@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>共振场：回声之间</title>
-    <script type="module" crossorigin src="./assets/index-CXO0QY6l.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-mAX2p-1D.css">
+    <script type="module" crossorigin src="./assets/index-BuIX3q8l.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-C2ky1MJL.css">
   </head>
   <body>
     <div id="app">
@@ -336,8 +336,13 @@
       <div class="overlay hidden" id="overlay-share">
         <div class="panel wide">
           <h2 class="panel-title" id="share-title">分享码</h2>
-          <p class="panel-desc" id="share-desc">复制这串文字发给朋友，对方在「我的关卡 → 导入分享码」粘贴即可。</p>
-          <textarea class="share-code" id="share-code" readonly rows="3" spellcheck="false"></textarea>
+          <div class="share-head">
+            <p class="panel-desc" id="share-desc">复制这串文字发给朋友，对方在「我的关卡 → 导入分享码」粘贴即可。</p>
+            <!-- 码长 180~500 字符，3 行窗口看不全。给个计数让人知道"有多长、是不是整串"，
+                 比让人盯着一个滚动窗口猜要踏实。纯展示，不参与任何逻辑。 -->
+            <span class="share-len" id="share-len">0 字符</span>
+          </div>
+          <textarea class="share-code" id="share-code" readonly rows="5" spellcheck="false"></textarea>
           <div class="btn-row">
             <button class="btn primary" id="btn-share-copy" type="button">复制</button>
             <button class="btn" id="btn-share-close" type="button">关闭</button>
