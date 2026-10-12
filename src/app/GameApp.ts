@@ -1,6 +1,7 @@
 import { AppState, ProgressStorage } from '../core/GameState';
 import { GameLoop } from '../core/GameLoop';
 import { InputController } from '../core/InputController';
+import { GamepadController, shortPadName } from '../core/GamepadController';
 import { CustomLevelStore, CustomLevelRecord } from '../core/CustomLevelStore';
 import { LevelManager } from '../levels/LevelManager';
 import { LevelDefinition } from '../levels/levelData';
@@ -13,6 +14,7 @@ import { HomeScreen } from '../ui/HomeScreen';
 import { LevelCenter, TabKey } from '../ui/LevelSelect';
 import { PausePanel, CompletePanel, ExhaustedPanel, FinalPanel } from '../ui/ResultPanel';
 import { TouchControls } from '../ui/TouchControls';
+import { MenuNavigator } from '../ui/MenuNavigator';
 import { ShareDialog } from '../ui/ShareDialog';
 import { EditorScreen } from '../editor/EditorScreen';
 import { buildRandomLevel } from '../gen/LevelGenerator';
@@ -49,6 +51,8 @@ export class GameApp {
   private store: CustomLevelStore;
   private manager: LevelManager;
   private input: InputController;
+  private gamepad: GamepadController;
+  private menus: MenuNavigator;
   private renderer: CanvasRenderer;
   private audio: AudioManager;
   private loop: GameLoop;
@@ -74,6 +78,9 @@ export class GameApp {
     this.store = new CustomLevelStore();
     this.manager = new LevelManager(this.storage);
     this.input = new InputController();
+    // 手柄必须在 setState 之前建好：setState 会重置菜单焦点
+    this.gamepad = new GamepadController((name) => this.handleGamepadChange(name));
+    this.menus = new MenuNavigator();
     this.renderer = new CanvasRenderer(canvas);
     this.audio = new AudioManager(this.storage.muted);
     this.touchControls = new TouchControls();
@@ -159,6 +166,10 @@ export class GameApp {
       if (target instanceof HTMLButtonElement) target.blur();
     });
 
+    // 玩家一旦改用鼠标 / 触摸，手柄焦点环就失去意义了，主动撤掉。
+    // （手柄焦点是加 class 而不是靠 :focus，所以上面那个 blur() 不会误伤它）
+    window.addEventListener('pointerdown', () => this.menus.reset());
+
     const handleResize = (): void => {
       this.renderer.resize();
       this.touchControls.applyDeviceMode();
@@ -177,6 +188,8 @@ export class GameApp {
 
   private setState(state: AppState): void {
     this.state = state;
+    // 每次切换界面都丢弃手柄焦点：旧界面的索引套到新界面上会指向随机按钮
+    this.menus.reset();
   }
 
   private gotoHome(): void {
@@ -192,6 +205,7 @@ export class GameApp {
     this.home.show();
     this.input.clearAll();
     this.touchControls.reset();
+    this.gamepad.reset();
     this.tutorial = null;
     this.external = null;
     this.refreshHomeStats();
@@ -208,6 +222,7 @@ export class GameApp {
     this.finalPanel.hide();
     this.input.clearAll();
     this.touchControls.reset();
+    this.gamepad.reset();
     this.tutorial = null;
     this.external = null;
     this.levelCenter.show(tab);
@@ -220,6 +235,7 @@ export class GameApp {
     this.hud.hide();
     this.input.clearAll();
     this.touchControls.reset();
+    this.gamepad.reset();
     this.editor.openNew();
   }
 
@@ -232,6 +248,7 @@ export class GameApp {
     this.hud.hide();
     this.input.clearAll();
     this.touchControls.reset();
+    this.gamepad.reset();
     this.editor.openRecord(record);
   }
 
@@ -329,6 +346,7 @@ export class GameApp {
     this.setState('playing');
     this.input.clearAll();
     this.touchControls.reset();
+    this.gamepad.reset();
   }
 
   /** 推进教学引导；若当前步骤命中该事件则更新提示条 */
@@ -350,6 +368,7 @@ export class GameApp {
     this.finalPanel.hide();
     this.input.clearAll();
     this.touchControls.reset();
+    this.gamepad.reset();
   }
 
   private pause(): void {
@@ -358,6 +377,7 @@ export class GameApp {
     this.pausePanel.show();
     this.input.clearAll();
     this.touchControls.reset();
+    this.gamepad.reset();
   }
 
   private resume(): void {
@@ -366,6 +386,7 @@ export class GameApp {
     this.setState('playing');
     this.input.clearAll();
     this.touchControls.reset();
+    this.gamepad.reset();
   }
 
   // ==================== 通关结算 ====================
@@ -525,6 +546,7 @@ export class GameApp {
 
     this.input.clearAll();
     this.touchControls.reset();
+    this.gamepad.reset();
   }
 
   // ==================== 力竭结算 ====================
@@ -594,6 +616,7 @@ export class GameApp {
 
     this.input.clearAll();
     this.touchControls.reset();
+    this.gamepad.reset();
   }
 
   private gotoNextLevel(): void {
@@ -718,32 +741,92 @@ export class GameApp {
     this.hud.setSoundLabel(this.audio.isMuted);
   }
 
+  /**
+   * 手柄插拔回调。
+   * 只在"连接状态真的变了"时被调用（判断在 GamepadController 里做），
+   * 所以这里可以放心地直接改 DOM，不会每帧重写 classList。
+   */
+  private handleGamepadChange(name: string | null): void {
+    document.body.classList.toggle('pad-connected', name !== null);
+    if (name !== null && this.state === 'playing') {
+      // 只在游玩中提示：标题页的 HUD 是隐藏的，弹 toast 玩家根本看不到
+      this.hud.showToast(`手柄已连接：${shortPadName(name)}`);
+    }
+    this.menus.reset();
+  }
+
   // ==================== 每帧更新 ====================
 
   private update(dt: number): void {
+    // 手柄是轮询式的，必须每帧主动取一次快照（见 GamepadController 说明）
+    this.gamepad.poll();
+
     if (this.state === 'playing' && this.session) {
       // 暂停 / 结算时不推进模拟：玩家、脉冲、计时、可见性全部冻结
-      // 触摸摇杆优先，其次是键盘方向键
-      const dir = this.touchControls.direction ?? this.readMoveDirection();
+      // 方向优先级：触摸摇杆 > 手柄 > 键盘。
+      // 三者各自可能返回 null，null 表示"这一路没在输入"，交给下一路。
+      const dir =
+        this.touchControls.direction ??
+        this.gamepad.direction ??
+        this.readMoveDirection();
       this.session.update(dt, dir);
 
-      if (this.touchControls.consumePulse()) this.session.emitPulse();
-      if (this.input.consumePress('pulse')) this.session.emitPulse();
-      if (this.input.consumePress('restart')) this.restartLevel();
-      if (this.input.consumePress('pause')) this.pause();
+      // 每种输入都各自 consume：用 || 串联会让前一个为真时短路掉后一个，
+      // 把它的按下事件留到下一帧去触发。
+      const padPulse = this.gamepad.consumePress('pulse');
+      const keyPulse = this.input.consumePress('pulse');
+      if (this.touchControls.consumePulse() || padPulse || keyPulse) this.session.emitPulse();
+
+      const padRestart = this.gamepad.consumePress('restart');
+      const keyRestart = this.input.consumePress('restart');
+      if (padRestart || keyRestart) this.restartLevel();
+
+      const padPause = this.gamepad.consumePress('pause');
+      const keyPause = this.input.consumePress('pause');
+      if (padPause || keyPause) this.pause();
     } else if (this.state === 'paused') {
-      if (this.input.consumePress('pause')) this.resume();
-      if (this.input.consumePress('restart')) {
+      const padPause = this.gamepad.consumePress('pause');
+      const keyPause = this.input.consumePress('pause');
+      if (padPause || keyPause) this.resume();
+
+      const padRestart = this.gamepad.consumePress('restart');
+      const keyRestart = this.input.consumePress('restart');
+      if (padRestart || keyRestart) {
         this.pausePanel.hide();
         this.restartLevel();
       }
     } else if (this.state === 'exhausted' && this.session) {
       // 力竭后仍推进特效（让爆炸粒子播完），但玩家不能再操作
       this.session.update(dt, null);
-      if (this.input.consumePress('restart')) this.restartLevel(this.session.keepTrapMemoryOnDeath);
+      const padRestart = this.gamepad.consumePress('restart');
+      const keyRestart = this.input.consumePress('restart');
+      if (padRestart || keyRestart) this.restartLevel(this.session.keepTrapMemoryOnDeath);
     }
 
+    // 非游玩状态把手柄交给菜单导航：否则打完一关就点不到"下一关"
+    if (this.state !== 'playing') this.updateMenuFocus();
+
     this.input.endFrame();
+    this.gamepad.endFrame();
+  }
+
+  /**
+   * 手柄的界面焦点导航。
+   *
+   * 编辑器被排除在外：那是一个鼠标/触摸的"作画"界面，
+   * 手柄进去只会和落笔、擦除抢同一个按键，帮不上忙。
+   */
+  private updateMenuFocus(): void {
+    if (this.state === 'editor') return;
+
+    const prevLeft = this.gamepad.consumePress('left');
+    const prevUp = this.gamepad.consumePress('up');
+    const nextRight = this.gamepad.consumePress('right');
+    const nextDown = this.gamepad.consumePress('down');
+    if (prevLeft || prevUp) this.menus.move(-1);
+    if (nextRight || nextDown) this.menus.move(1);
+
+    if (this.gamepad.consumePress('pulse')) this.menus.activate();
   }
 
   /** 把持续按住的方向键转换为移动方向（同时按下时优先最后按下的轴） */
@@ -789,7 +872,11 @@ export class GameApp {
       stars: session ? session.stars : 0,
       elapsed: session ? Number(session.elapsed.toFixed(2)) : 0,
       activePulse: session ? session.pulseSystem.pulse !== null : false,
-      cooldown: session ? Number(session.pulseSystem.cooldown.toFixed(2)) : 0
+      cooldown: session ? Number(session.pulseSystem.cooldown.toFixed(2)) : 0,
+      // 手柄：验收脚本要确认"连接后提示条换成手柄键位"以及菜单焦点落在谁身上
+      gamepadConnected: this.gamepad.isConnected,
+      gamepadName: this.gamepad.isConnected ? shortPadName(this.gamepad.name) : null,
+      menuFocus: this.menus.focused?.textContent ?? null
     };
   }
 

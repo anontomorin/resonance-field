@@ -288,6 +288,29 @@ body {
   color: var(--text);
 }
 
+/* 手柄键位提示：与键盘提示同一套排法，只在有手柄时顶替它出现 */
+.padhint {
+  display: none;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-family: var(--mono);
+  font-size: var(--fs-xxs);
+  color: var(--text-dim);
+}
+
+.padhint b {
+  display: inline-block;
+  padding: 2px 6px;
+  margin-right: 3px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  font-size: var(--fs-xxs);
+  letter-spacing: 0.5px;
+}
+
 /* 教学提示条：琥珀色左框 + 实底，像仪器上的状态行 */
 .tipbar {
   position: absolute;
@@ -349,6 +372,30 @@ body.touch-enabled .keyhint {
 
 body.touch-enabled .touchhint {
   display: flex;
+}
+
+/* 接上手柄就把键盘键位换成手柄键位——两套同时列出来只会让人犹豫看哪一行 */
+body.pad-connected .keyhint {
+  display: none;
+}
+
+body.pad-connected .padhint {
+  display: flex;
+}
+
+/* 触摸优先：摇杆已经占住了屏幕底部，再叠一行手柄提示只会互相挤 */
+body.touch-enabled .padhint {
+  display: none;
+}
+
+/*
+ * 手柄焦点环。
+ * 刻意复用界面里既有的 :focus-visible 视觉（1px 琥珀描边 + 2px 偏移），
+ * 让"鼠标键盘选中的"和"手柄选中的"看起来是同一件事。
+ */
+.pad-focus {
+  outline: 1px solid var(--amber);
+  outline-offset: 2px;
 }
 
 .joystick {
