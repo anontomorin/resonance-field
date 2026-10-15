@@ -2,7 +2,7 @@
   "name": "resonance-field",
   "private": true,
   "version": "1.0.0",
-  "description": "《共振场：回声之间》—— 基于网格 BFS 声波传播的 2D 空间感知益智游戏",
+  "description": "《共振场：听见深海》—— 基于网格 BFS 声波传播的 2D 空间感知益智游戏",
   "type": "module",
   "scripts": {
     "dev": "vite",

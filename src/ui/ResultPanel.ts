@@ -1,6 +1,39 @@
 /** 暂停面板、通关面板与最终结算面板 */
 
 import { paintStars, renderStars } from './stars';
+import { OceanKnowledgeCard } from '../content/oceanKnowledge';
+
+/** 知识卡在通关面板与最终结算面板上共用的元素引用 */
+interface KnowledgeCardElements {
+  root: HTMLElement;
+  title: HTMLElement;
+  body: HTMLElement;
+  source: HTMLElement;
+  link: HTMLAnchorElement;
+}
+
+/**
+ * 渲染「深海声景档案」卡片。
+ *
+ * 用 textContent 写入文本，链接只能是本地静态资料表里的 URL：
+ * 因此外部关卡即使复用了主线 id，也不会被误匹配到别的卡片。
+ * 未传入卡片时明确隐藏并清空，避免重玩 / 下一关 / 切换模式后残留上一张。
+ */
+function paintKnowledgeCard(els: KnowledgeCardElements, card?: OceanKnowledgeCard): void {
+  if (!card) {
+    els.root.classList.add('hidden');
+    els.title.textContent = '';
+    els.body.textContent = '';
+    els.source.textContent = '';
+    els.link.removeAttribute('href');
+    return;
+  }
+  els.title.textContent = card.title;
+  els.body.textContent = card.body;
+  els.source.textContent = `来源：${card.sourceName} · ${card.sourceTitle}`;
+  els.link.href = card.sourceUrl;
+  els.root.classList.remove('hidden');
+}
 
 export interface PauseCallbacks {
   onResume: () => void;
@@ -115,6 +148,7 @@ export class CompletePanel {
   private timeEl: HTMLElement;
   private pulsesEl: HTMLElement;
   private parEl: HTMLElement;
+  private knowledge: KnowledgeCardElements;
   private actionsEl: HTMLElement;
 
   constructor() {
@@ -126,6 +160,13 @@ export class CompletePanel {
     this.timeEl = requireEl('complete-time');
     this.pulsesEl = requireEl('complete-pulses');
     this.parEl = requireEl('complete-par');
+    this.knowledge = {
+      root: requireEl('complete-knowledge'),
+      title: requireEl('kc-title'),
+      body: requireEl('kc-body'),
+      source: requireEl('kc-source'),
+      link: requireEl('kc-link') as HTMLAnchorElement
+    };
     this.actionsEl = requireEl('complete-actions');
   }
 
@@ -148,6 +189,11 @@ export class CompletePanel {
     comment: string;
     /** 是否刷新了历史最佳星级 */
     newRecord?: boolean;
+    /**
+     * 可选知识卡：主线关卡传入对应卡片，随机 / 自定义关卡传通用卡。
+     * 不传则明确隐藏卡片，避免重玩、下一关或切换模式后残留上一张。
+     */
+    knowledgeCard?: OceanKnowledgeCard;
     actions: CompleteAction[];
   }): void {
     this.titleEl.textContent = `${data.levelTitle} · 完成`;
@@ -165,6 +211,8 @@ export class CompletePanel {
     this.timeEl.textContent = formatTime(data.seconds);
     this.pulsesEl.textContent = String(data.pulses);
     this.parEl.textContent = String(data.par);
+
+    paintKnowledgeCard(this.knowledge, data.knowledgeCard);
 
     this.actionsEl.innerHTML = '';
     for (const action of data.actions) {
@@ -189,17 +237,30 @@ export class FinalPanel {
   private root: HTMLElement;
   private stats: HTMLElement;
   private totalEl: HTMLElement;
+  private knowledge: KnowledgeCardElements;
 
   constructor(callbacks: FinalCallbacks) {
     this.root = requireEl('overlay-final');
     this.stats = requireEl('final-stats');
     this.totalEl = requireEl('final-total');
+    this.knowledge = {
+      root: requireEl('final-knowledge'),
+      title: requireEl('fkc-title'),
+      body: requireEl('fkc-body'),
+      source: requireEl('fkc-source'),
+      link: requireEl('fkc-link') as HTMLAnchorElement
+    };
     requireEl('btn-final-title').addEventListener('click', callbacks.onBackToTitle);
     requireEl('btn-final-replay').addEventListener('click', callbacks.onReplayAll);
   }
 
+  /**
+   * 最终结算面板。
+   * @param knowledgeCard 主线最后一关的知识卡；不传则隐藏卡片。
+   */
   show(
-    levelStats: Array<{ title: string; seconds: number; pulses: number; stars: number }>
+    levelStats: Array<{ title: string; seconds: number; pulses: number; stars: number }>,
+    knowledgeCard?: OceanKnowledgeCard
   ): void {
     this.stats.innerHTML = '';
     let got = 0;
@@ -231,6 +292,9 @@ export class FinalPanel {
     const max = levelStats.length * 3;
     this.totalEl.innerHTML = `总计 <strong>${got}</strong> / ${max} 星`;
     this.totalEl.classList.toggle('perfect', max > 0 && got === max);
+
+    paintKnowledgeCard(this.knowledge, knowledgeCard);
+
     this.root.classList.remove('hidden');
   }
 

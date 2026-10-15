@@ -17,6 +17,7 @@ import {
 import { copyText } from './clipboard';
 import { renderStars } from './stars';
 import { encodeRandomCode } from '../levels/shareCode';
+import { campaignKnowledgeCard } from '../content/oceanKnowledge';
 
 export type TabKey = 'campaign' | 'random' | 'custom';
 
@@ -263,6 +264,22 @@ export class LevelCenter {
       card.appendChild(title);
       card.appendChild(sub);
 
+      // 档案角标：这一关对应首页档案条里的哪一份公开资料，来源在进关前就摆出来
+      const knowledge = campaignKnowledgeCard(level.id);
+      if (knowledge) {
+        const archive = document.createElement('div');
+        archive.className = 'lc-archive';
+        const code = document.createElement('span');
+        code.className = 'lc-archive-code';
+        code.textContent = `ARCHIVE 0${level.id}`;
+        const org = document.createElement('span');
+        org.className = 'lc-archive-org';
+        org.textContent = unlocked ? knowledge.sourceName : '—';
+        archive.appendChild(code);
+        archive.appendChild(org);
+        card.appendChild(archive);
+      }
+
       if (cleared) {
         const best = this.manager.bestTimeOf(level.id);
         const stars = this.manager.starsOf(level.id);
@@ -276,6 +293,11 @@ export class LevelCenter {
           time.textContent = `最佳 ${formatTime(best)}`;
           clear.appendChild(time);
         }
+        // 通关过的关卡带上「已归档」状态标记：和首页档案条同一口径
+        const archived = document.createElement('span');
+        archived.className = 'lc-archived';
+        archived.textContent = '已归档';
+        clear.appendChild(archived);
         card.appendChild(clear);
       } else if (!unlocked) {
         const lock = document.createElement('div');

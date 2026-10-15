@@ -2,7 +2,7 @@
  * 统一视觉主题。
  *
  * 设计口径：
- * - 底色走**中性近黑**（不是墨蓝），界面与画布用同一套灰阶，
+ * - 底色走**极深海蓝**（不是中性灰）：同一套色阶贯穿画布与 HUD，
  *   这样 HUD 压在画布上不会显得是"两个 app 拼起来"；
  * - 颜色克制：地面/墙/未知区全部低饱和，唯一的高饱和色留给声波与玩家，
  *   玩家一眼就知道"亮起来的那部分才是信息"；
@@ -20,17 +20,17 @@ export function alpha(hex: string, a: number): string {
 }
 
 export const Theme = {
-  /** 背景渐变（由内到外）：中心稍亮，四周压到近黑，形成"洞窟感" */
-  backgroundInner: '#191d21',
-  backgroundMid: '#111417',
-  backgroundOuter: '#0b0c0e',
+  /** 背景渐变（由内到外）：中心稍亮，四周压到近黑，形成"深海下潜"的纵深 */
+  backgroundInner: '#12303f',
+  backgroundMid: '#0b1e28',
+  backgroundOuter: '#07131b',
 
   /** 未知区域的背景纹理 */
-  unknownBase: '#0e1013',
-  unknownGrid: 'rgba(216, 220, 224, 0.05)',
+  unknownBase: '#061119',
+  unknownGrid: 'rgba(150, 205, 230, 0.05)',
 
-  /** 地面：可通行区域，中等冷灰，读起来是"能走的平面" */
-  floorFill: '#2b323a',
+  /** 地面：可通行区域，中等深海蓝，读起来是"能走的平面" */
+  floorFill: '#203641',
   floorStroke: 'rgba(216, 220, 224, 0.32)',
   floorGlow: 'rgba(95, 201, 221, 0.14)',
   /** 地面内部细网格，让格子边界可见 */
@@ -38,7 +38,7 @@ export const Theme = {
 
   /** 墙壁：比地面**明显更暗**，并且填满，读起来是"实心障碍"。
    *  重绘时墙被调得和地面太接近，玩家分不清能不能走，这里把对比拉回来。 */
-  wallFill: '#080a0c',
+  wallFill: '#050a0e',
   wallStroke: 'rgba(216, 220, 224, 0.6)',
   /** 墙面顶部亮边，让墙有一点体积而不是一块纯色 */
   wallHighlight: 'rgba(216, 220, 224, 0.13)',

@@ -16,12 +16,14 @@ import { PausePanel, CompletePanel, ExhaustedPanel, FinalPanel } from '../ui/Res
 import { TouchControls } from '../ui/TouchControls';
 import { MenuNavigator } from '../ui/MenuNavigator';
 import { ShareDialog } from '../ui/ShareDialog';
+import { ArchiveWall } from '../ui/ArchiveWall';
 import { EditorScreen } from '../editor/EditorScreen';
 import { buildRandomLevel } from '../gen/LevelGenerator';
 import { RandomLevelParams, randomSeed } from '../gen/randomParams';
 import { analyzeRows, firstError, normalizeTitle } from '../levels/mapAnalysis';
 import { decodeShareCode, encodeMapCode, encodeMapShareText, encodeRandomCode } from '../levels/shareCode';
 import { starsFor, starComment, Stars } from '../game/StarRating';
+import { campaignKnowledgeCard, GENERIC_KNOWLEDGE_CARD } from '../content/oceanKnowledge';
 
 interface LevelStat {
   title: string;
@@ -59,6 +61,7 @@ export class GameApp {
 
   private hud: HUD;
   private home: HomeScreen;
+  private archive: ArchiveWall;
   private levelCenter: LevelCenter;
   private editor: EditorScreen;
   private share: ShareDialog;
@@ -100,6 +103,8 @@ export class GameApp {
       onCustom: () => this.gotoLevelCenter('custom'),
       onToggleSound: () => this.toggleSound()
     });
+
+    this.archive = new ArchiveWall(this.manager);
 
     this.levelCenter = new LevelCenter(this.manager, this.store, {
       onBack: () => this.gotoHome(),
@@ -266,6 +271,8 @@ export class GameApp {
 
   private refreshHomeStats(): void {
     this.home.setStats(this.storage.cleared.length, this.manager.count, this.store.list().length);
+    // 首页档案条的「已归档」标记跟着主线进度走，所以和统计一起刷新
+    this.archive.refresh();
   }
 
   // ==================== 开始游戏 ====================
@@ -309,18 +316,18 @@ export class GameApp {
       onMoved: () => this.advanceTutorial('move'),
       onResonatorActivated: (activated, total) => {
         this.audio.playNode();
-        this.hud.showToast(`共振节点已激活 ${activated} / ${total}`);
+        this.hud.showToast(`观测节点已记录 ${activated} / ${total}`);
         this.advanceTutorial('node');
       },
       onExitOpened: () => {
         this.audio.playExitOpen();
-        this.hud.showToast('出口已开启：走进出口即可通关');
+        this.hud.showToast('本区记录已完成，进入出口离开调查区');
         this.advanceTutorial('exitOpen');
       },
       onBump: (reason) => {
         this.audio.playBump();
         if (reason === 'exit') {
-          this.hud.showToast('出口尚未开启：先激活所有共振节点');
+          this.hud.showToast('出口尚未开启：先记录全部观测节点');
         }
       },
       onHurt: (health, maxHealth) => {
@@ -437,7 +444,7 @@ export class GameApp {
             stars: (this.manager.starsOf(l.id) as Stars) ?? 0
           };
         });
-        this.finalPanel.show(list);
+        this.finalPanel.show(list, campaignKnowledgeCard(level.id));
       } else {
         this.setState('levelComplete');
         this.hud.hide();
@@ -451,6 +458,8 @@ export class GameApp {
           stars,
           comment,
           newRecord: stars > previousStars,
+          // 主线关卡：按内置关卡 id 取对应的深海声景知识卡
+          knowledgeCard: campaignKnowledgeCard(level.id),
           actions: [
             { label: '下一关', kind: 'primary', onClick: () => this.gotoNextLevel() },
             { label: '重玩本关', onClick: () => this.replayCurrent() },
@@ -479,6 +488,8 @@ export class GameApp {
         par,
         stars,
         comment,
+        // 随机关卡没有固定的科学情境：显示通用卡，不按 id 匹配主线卡片
+        knowledgeCard: GENERIC_KNOWLEDGE_CARD,
         actions: [
           {
             label: '换一张新的',
@@ -525,6 +536,8 @@ export class GameApp {
         comment,
         // 编辑器试玩没有"历史纪录"的概念（地图可能刚改过），所以不标新纪录
         newRecord: level.customId ? newRecord : false,
+        // 自定义关卡同样没有固定的科学情境：显示通用卡
+        knowledgeCard: GENERIC_KNOWLEDGE_CARD,
         actions: fromEditor
           ? [
               {
