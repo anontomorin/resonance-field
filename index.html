@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>共振场：回声之间</title>
-    <script type="module" crossorigin src="./assets/index-BuIX3q8l.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-C2ky1MJL.css">
+    <title>共振场：听见深海</title>
+    <script type="module" crossorigin src="./assets/index-C-lprKzn.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DwlEp5SV.css">
   </head>
   <body>
     <div id="app">
@@ -22,7 +22,7 @@
             </div>
             <div class="hud-center">
               <div class="stat">
-                <span class="stat-label">节点</span>
+                <span class="stat-label">观测节点</span>
                 <span class="stat-value" id="hud-nodes">0 / 1</span>
               </div>
               <div class="stat">
@@ -86,65 +86,105 @@
         </div>
       </div>
 
-      <!-- ===================== 首页 ===================== -->
+      <!-- ===================== 首页：驾驶舱主控台 =====================
+           版面就是一块全屏驾驶舱，不是一条居中的窄栏：
+           左舷 .console-deck 是读数与操作，右舷 .console-scope 是声呐显示器，
+           下方 .archive-block 是全宽的档案样本架。 -->
       <div class="overlay screen" id="overlay-title">
         <div class="home">
-          <div class="home-brand">
-            <div class="title-mark">RESONANCE FIELD</div>
-            <h1 class="game-title">共振场：回声之间</h1>
-            <p class="game-tagline">发出回响，感知未知，寻找通路</p>
+          <div class="console-top">
+            <div class="console-deck">
+              <div class="home-brand">
+                <div class="title-mark">DEEP SEA SOUNDSCAPE</div>
+                <h1 class="game-title">共振场：听见深海</h1>
+                <p class="game-tagline">海洋并非无声。穿过未知与干扰，重新听见生命信号。</p>
+              </div>
+
+              <!-- 三步循环：让玩家在点进第一关之前就知道这个游戏在干什么 -->
+              <ol class="loop-strip">
+                <li class="loop-step">
+                  <span class="loop-num">1</span>
+                  <span class="loop-name">进入未知海域</span>
+                  <span class="loop-desc">从有限的信息开始调查，撞墙不算惩罚</span>
+                </li>
+                <li class="loop-step">
+                  <span class="loop-num">2</span>
+                  <span class="loop-name">发射探测脉冲</span>
+                  <span class="loop-desc">脉冲沿通道扩散 8 格，注意墙体遮挡</span>
+                </li>
+                <li class="loop-step">
+                  <span class="loop-num">3</span>
+                  <span class="loop-name">完成观测记录</span>
+                  <span class="loop-desc">激活全部节点，寻找离开调查区的通路</span>
+                </li>
+              </ol>
+
+              <div class="mode-grid">
+                <button class="mode-card" id="mode-campaign" type="button">
+                  <span class="mode-icon">01</span>
+                  <span>
+                    <span class="mode-name">主线关卡</span>
+                    <span class="mode-desc">教学关 + 4 张手工海域，逐关解锁</span>
+                  </span>
+                  <span class="mode-meta" id="mode-campaign-meta">0 / 5</span>
+                </button>
+                <button class="mode-card" id="mode-random" type="button">
+                  <span class="mode-icon">02</span>
+                  <span>
+                    <span class="mode-name">随机回声</span>
+                    <span class="mode-desc">每次生成一片未知海域，种子可分享</span>
+                  </span>
+                  <span class="mode-meta">无限</span>
+                </button>
+                <button class="mode-card" id="mode-custom" type="button">
+                  <span class="mode-icon">03</span>
+                  <span>
+                    <span class="mode-name">我的关卡</span>
+                    <span class="mode-desc">自己画调查区，导出分享码给朋友</span>
+                  </span>
+                  <span class="mode-meta" id="mode-custom-meta">0 张</span>
+                </button>
+              </div>
+
+              <div class="home-actions">
+                <button class="btn ghost" id="btn-help" type="button">操作说明</button>
+                <button class="btn ghost" id="btn-sound-title" type="button">声音：关</button>
+              </div>
+            </div>
+
+            <!-- 右舷声呐显示器：同心刻度环 + 旋转扫描扇形 + 扩散脉冲环 + 回波亮点。
+                 整块是纯 CSS 装饰（可动的部分都标了 aria-hidden），
+                 下面的读数行才是信息，而且只写游戏内真实机制。 -->
+            <aside class="console-scope">
+              <div class="scope-head">
+                <span class="scope-kicker">Sonar Array</span>
+                <span class="scope-led" aria-hidden="true"></span>
+              </div>
+              <div class="scope-bezel" aria-hidden="true">
+                <div class="scope-screen">
+                  <i class="scope-sweep"></i>
+                  <i class="scope-ping"></i>
+                </div>
+              </div>
+              <ul class="scope-readout">
+                <li><span class="ro-label">探测半径</span><span class="ro-value">8 格</span></li>
+                <li><span class="ro-label">墙体遮挡</span><span class="ro-value">生效</span></li>
+                <li><span class="ro-label">回声干扰</span><span class="ro-value">存在</span></li>
+              </ul>
+              <div class="scope-trace" aria-hidden="true"></div>
+            </aside>
           </div>
 
-          <!-- 三步循环：让玩家在点进第一关之前就知道这个游戏在干什么 -->
-          <ol class="loop-strip">
-            <li class="loop-step">
-              <span class="loop-num">1</span>
-              <span class="loop-name">移动</span>
-              <span class="loop-desc">在黑暗里摸索，撞墙不算惩罚</span>
-            </li>
-            <li class="loop-step">
-              <span class="loop-num">2</span>
-              <span class="loop-name">发声波</span>
-              <span class="loop-desc">沿通道扩散 8 格，照亮周围结构</span>
-            </li>
-            <li class="loop-step">
-              <span class="loop-num">3</span>
-              <span class="loop-name">共振</span>
-              <span class="loop-desc">激活全部节点，开启出口离开</span>
-            </li>
-          </ol>
-
-          <div class="mode-grid">
-            <button class="mode-card" id="mode-campaign" type="button">
-              <span class="mode-icon">01</span>
-              <span>
-                <span class="mode-name">主线关卡</span>
-                <span class="mode-desc">教学关 + 4 张手工关卡，逐关解锁</span>
-              </span>
-              <span class="mode-meta" id="mode-campaign-meta">0 / 5</span>
-            </button>
-            <button class="mode-card" id="mode-random" type="button">
-              <span class="mode-icon">02</span>
-              <span>
-                <span class="mode-name">随机回声</span>
-                <span class="mode-desc">每次生成一张新迷宫，种子可分享</span>
-              </span>
-              <span class="mode-meta">无限</span>
-            </button>
-            <button class="mode-card" id="mode-custom" type="button">
-              <span class="mode-icon">03</span>
-              <span>
-                <span class="mode-name">我的关卡</span>
-                <span class="mode-desc">自己画地图，导出分享码给朋友</span>
-              </span>
-              <span class="mode-meta" id="mode-custom-meta">0 张</span>
-            </button>
-          </div>
-
-          <div class="home-actions">
-            <button class="btn ghost" id="btn-help" type="button">操作说明</button>
-            <button class="btn ghost" id="btn-sound-title" type="button">声音：关</button>
-          </div>
+          <!-- 深海声景档案：由 NOAA / NOAA Fisheries / IMO 公开资料整理的五张科普卡。
+               正文始终完整可读，不打码也不锁内容；主线通关后对应卡片会打上「已归档」标记，
+               表示"这一片声景你已经亲自走完"，而不是"内容现在才解锁"。 -->
+          <section class="archive-block">
+            <div class="archive-head">
+              <span class="archive-head-label">深海声景档案</span>
+              <span class="archive-progress" id="archive-progress">0 / 5 已归档</span>
+            </div>
+            <div class="archive-grid" id="archive-grid"></div>
+          </section>
 
           <div class="help-box hidden" id="help-box">
             <h3>操作说明</h3>
@@ -154,17 +194,17 @@
               <li><b>移动端</b>：左下摇杆移动，右下「声波」按钮发射脉冲，右上角可重开与暂停。</li>
               <li><b>R</b>：重新开始当前关卡。<b>Esc</b>：暂停 / 继续。</li>
               <li>声波<b>不能穿墙</b>：墙后的区域必须绕行到另一条通路后才能被探测到。</li>
-              <li>被声波触及的<b>共振节点</b>（暖黄色）会被永久激活。</li>
-              <li>激活全部必需节点后，<b>出口</b>开启，走进出口即可通关。</li>
-              <li><b>尖刺</b>（红）扣血，<b>回声干扰器</b>（紫）会清空你已记住的地图。</li>
+              <li>被声波触及的<b>观测节点</b>（暖黄色）会被永久激活。</li>
+              <li>激活全部必需观测节点后，<b>出口</b>开启，走进出口即可离开调查区。</li>
+              <li><b>尖刺</b>（红）扣血，<b>回声干扰器</b>（紫）会清空你已记住的地图——干扰是游戏机制中的表现，不是真实海洋噪声的物理仿真。</li>
               <li>陷阱被声波扫到后会留下警示标记，记得绕开它们。</li>
-              <li>通关按<b>脉冲次数</b>评星：三星线 = 理论最优次数 + 1。</li>
+              <li>通关按<b>脉冲次数</b>评星：三星线 = 理论最优次数 + 1。这是游戏效率指标，不是现实环境噪声减排量。</li>
               <li><b>随机关卡</b>由种子生成，同一种子必定是同一张地图，可以复制种子码分享。</li>
-              <li><b>我的关卡</b>可以自己画地图，保存后再导出分享码发给朋友。</li>
+              <li><b>我的关卡</b>可以自己画调查区地图，保存后再导出分享码发给朋友。</li>
             </ul>
           </div>
 
-          <p class="foot-note">纯前端作品 · Vite + TypeScript + Canvas 2D</p>
+          <p class="foot-note">纯前端作品 · Vite + TypeScript + Canvas 2D · 游戏内脉冲为玩法抽象，非真实声呐或海洋监测</p>
         </div>
       </div>
 
@@ -366,17 +406,36 @@
 
       <!-- ===================== 通关面板（按钮按关卡来源动态生成） ===================== -->
       <div class="overlay hidden" id="overlay-complete">
-        <div class="panel">
+        <div class="panel result-panel">
           <div class="result-badge">回响已连接</div>
           <h2 class="panel-title" id="complete-title">关卡完成</h2>
-          <!-- 星级评分：以本局脉冲次数为依据，三星线 = 理论最优 + 1 -->
-          <div class="star-row" id="complete-stars" aria-label="本关星级"></div>
-          <p class="star-comment" id="complete-star-comment"></p>
-          <div class="result-stats">
-            <div><span class="stat-label">激活节点</span><span class="stat-value" id="complete-nodes">1 / 1</span></div>
-            <div><span class="stat-label">用时</span><span class="stat-value" id="complete-time">00:00</span></div>
-            <div><span class="stat-label">脉冲次数</span><span class="stat-value" id="complete-pulses">0</span></div>
-            <div><span class="stat-label">理论最优</span><span class="stat-value" id="complete-par">—</span></div>
+          <!-- 左右分栏：深海声景档案是主角（左），星级与统计是次（右）。
+               窄屏改为竖排，并把统计放到卡片上方：先给"这局打得怎么样"，再给"顺带知道了什么"。 -->
+          <div class="result-split">
+            <div class="result-split-main">
+              <!-- 深海声景档案：通关后附带的科普知识卡，来源与链接固定，正文完整可读，
+                   不阻断任何结算按钮，也不参与手柄的线性焦点导航。 -->
+              <div class="knowledge-card hidden" id="complete-knowledge">
+                <div class="kc-tag">深海声景档案</div>
+                <h3 class="kc-title" id="kc-title"></h3>
+                <p class="kc-body" id="kc-body"></p>
+                <div class="kc-foot">
+                  <span class="kc-source" id="kc-source"></span>
+                  <a class="kc-link" id="kc-link" target="_blank" rel="noopener noreferrer">查看原始资料 ↗</a>
+                </div>
+              </div>
+            </div>
+            <div class="result-split-side">
+              <!-- 星级评分：以本局脉冲次数为依据，三星线 = 理论最优 + 1 -->
+              <div class="star-row" id="complete-stars" aria-label="本关星级"></div>
+              <p class="star-comment" id="complete-star-comment"></p>
+              <div class="result-stats">
+                <div><span class="stat-label">观测节点</span><span class="stat-value" id="complete-nodes">1 / 1</span></div>
+                <div><span class="stat-label">用时</span><span class="stat-value" id="complete-time">00:00</span></div>
+                <div><span class="stat-label">脉冲次数</span><span class="stat-value" id="complete-pulses">0</span></div>
+                <div><span class="stat-label">理论最优</span><span class="stat-value" id="complete-par">—</span></div>
+              </div>
+            </div>
           </div>
           <div class="btn-col" id="complete-actions"></div>
         </div>
@@ -391,7 +450,7 @@
             生命耗尽，本次探索到此为止。已发现的陷阱位置会保留下来，再来一次会快很多。
           </p>
           <div class="result-stats">
-            <div><span class="stat-label">激活节点</span><span class="stat-value" id="exhausted-nodes">0 / 1</span></div>
+            <div><span class="stat-label">观测节点</span><span class="stat-value" id="exhausted-nodes">0 / 1</span></div>
             <div><span class="stat-label">坚持时间</span><span class="stat-value" id="exhausted-time">00:00</span></div>
             <div><span class="stat-label">踩中陷阱</span><span class="stat-value" id="exhausted-hits">0</span></div>
           </div>
@@ -401,12 +460,29 @@
 
       <!-- ===================== 最终结算 ===================== -->
       <div class="overlay hidden" id="overlay-final">
-        <div class="panel">
+        <div class="panel result-panel">
           <div class="result-badge gold">全部完成</div>
           <h2 class="panel-title">所有回响已连接</h2>
           <p class="panel-desc">你走完了全部共振场，回声之间的空间已经完全显现。</p>
-          <div class="result-stats" id="final-stats"></div>
-          <div class="final-total" id="final-total"></div>
+          <!-- 与通关面板同一套分栏：知识卡在左（主角），成绩汇总在右（次） -->
+          <div class="result-split">
+            <div class="result-split-main">
+              <!-- 深海声景档案：主线最后一关的知识卡，与通关面板同一套结构与样式 -->
+              <div class="knowledge-card hidden" id="final-knowledge">
+                <div class="kc-tag">深海声景档案</div>
+                <h3 class="kc-title" id="fkc-title"></h3>
+                <p class="kc-body" id="fkc-body"></p>
+                <div class="kc-foot">
+                  <span class="kc-source" id="fkc-source"></span>
+                  <a class="kc-link" id="fkc-link" target="_blank" rel="noopener noreferrer">查看原始资料 ↗</a>
+                </div>
+              </div>
+            </div>
+            <div class="result-split-side">
+              <div class="result-stats" id="final-stats"></div>
+              <div class="final-total" id="final-total"></div>
+            </div>
+          </div>
           <div class="btn-col">
             <button class="btn primary" id="btn-final-title" type="button">返回首页</button>
             <button class="btn" id="btn-final-replay" type="button">从第一关重新游玩</button>
